@@ -1,29 +1,43 @@
 # Interval — a spacetime playground
 
-Open the published prototype: https://interval-spacetime.gap2000.chatgpt.site/
+Play: https://georgephilippou.github.io/interval-spacetime/
+
+Source: https://github.com/GeorgePhilippou/interval-spacetime
 
 Drag the scene to orbit; use a wheel or pinch to zoom. Switch **Space / Time** to unfold histories. Pause and scrub the timeline, or choose **Send light** to start a new pulse at time zero. **Move the clocks** changes the supported clocks' radii and starts a fresh comparison. The information button explains the model.
 
-This is a separate experiment. The earlier Atlas project is preserved.
+Interval is the active project. The earlier Atlas experiment is retired, with a recoverable local archive.
 
 ## Continue working locally
 
 Requires Node.js for tests; Python 3 can serve the self-contained static files.
 
 ```sh
-cd /Users/georgephilippou/Developer/IntervalSpacetime
+git clone https://github.com/GeorgePhilippou/interval-spacetime.git
+cd interval-spacetime
 python3 -m http.server 4188 --bind 127.0.0.1 --directory dist
 ```
 
-Open http://127.0.0.1:4188/ on this Mac. For iPad, use the published HTTPS link while signed into the owning ChatGPT account; local loopback does not reach the Mac from an iPad. Actual iPad hardware testing remains to be done.
+Open http://127.0.0.1:4188/ on this Mac. On iPad, open the public Play link in Safari. No account or installation is required. Local loopback does not reach the Mac from an iPad. Actual iPad hardware testing remains to be done.
 
 - `dist/app.js`: Three.js scene, animation and interactions.
 - `dist/physics.js`: independent, dimensionless Schwarzschild physics.
 - `dist/style.css` and `dist/index.html`: layout and interface.
 - `tests/physics.test.js`: analytic limits, null constraint, capture/escape, symmetry and integration convergence.
-- `.openai/hosting.json`: private Sites project identity.
+- `.github/workflows/pages.yml`: tests and GitHub Pages deployment.
+- `.openai/hosting.json`: retained identity of the earlier private Sites preview; not used by GitHub Pages.
 
-Run `npm test`. Runtime libraries and fonts are self-hosted in `dist/`; no CDN is required. `npm ci` is only needed to refresh the pinned Three.js source dependency. The source is synchronized to the Sites-managed Git repository during publication; no separate GitHub repository was created.
+Run `npm test`. Runtime libraries and fonts are self-hosted in `dist/`; no CDN is required. `npm ci` is only needed to refresh the pinned Three.js source dependency. GitHub is the source of truth. Pushes to `main` run the physics tests and syntax check, then publish only `dist/` to GitHub Pages. Pull requests run checks without publishing. GitHub Actions uses pinned official actions and the built-in deployment token; no manually maintained hosting secret is needed. The earlier ChatGPT-hosted preview is a separate snapshot and is not updated by this workflow.
+
+## Make a change later
+
+1. Edit the files locally and run `npm test`.
+2. Preview with the Python command above.
+3. Commit and push to `main` for small approved changes, or use a branch and pull request for larger experiments.
+4. Check the **Actions** tab on GitHub. A successful deployment publishes the new version; a push by itself is not evidence of a working site.
+5. Reload the Play link on the target device and check the changed behavior.
+
+The previous commits remain recoverable. To undo a bad update, revert its commit and push the revert. A custom domain can be added later without changing the app. GitHub Pages suits the current browser-only model; server accounts, private data or a backend would need a separate hosting decision.
 
 ## Scientific scope
 
