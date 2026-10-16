@@ -12,8 +12,8 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 |---|---|---|
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.3 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
-| Electromagnetic waves | — | next |
-| Quantum wavefunctions | — | planned |
+| Light as a wave · electromagnetism | `dist/light/` | v0.1 |
+| Quantum wavefunctions | — | next |
 | Entropy and the arrow of time | — | planned |
 
 `dist/index.html` is the home page, with a card per concept.
@@ -67,6 +67,17 @@ Flat spacetime, c = 1, distances in light-seconds and times in seconds; motion a
 - Not rendered: what a camera would see (light-travel delay, Doppler shift, Terrell rotation).
 
 Tests check γ and rapidity addition, interval invariance under boosts, light speed c in both frames, the light-clock tick, simultaneity and contraction, reciprocal dilation, the twin result and the simultaneity jump.
+
+## Light as a wave: scientific scope
+
+Maxwell's equations in 2D TM form (Ez out of plane, H in plane), solved with the Yee FDTD method on a 220 × 220 grid at Courant number 0.5. Normalised units: c = 1, ε₀ = μ₀ = 1, cell size 1. A cubic-graded matched conducting border (24 cells) absorbs outgoing waves. Glass has ε = n²; the slit wall is a perfect conductor.
+
+- Experiments: a point source (antenna), a plane wave from a line source, two slits in a metal wall, and a biconvex lens (n adjustable). The marked focus uses the thick-lens formula.
+- The surface height and colour are Ez (tanh-compressed and auto-scaled for display); brightness is a running time average of Ez².
+- Arrows show Ez and (Hx, Hy) along one line, straight from the simulation; "E/cB" compares their peaks over a period.
+- Not modelled: 3D (2D waves fade as 1/√r), the other polarisation, dispersion in glass. The grid makes waves about 0.3% slow.
+
+Tests check: pulse speed c and c/n, wavelength λ/n in glass, E/cB = 1 and 1/n with B ⟂ the direction of travel, energy conservation in a metal box, < 1% reflection from the border, and a dark fringe where the path difference is λ/2.
 
 ## Licensing
 

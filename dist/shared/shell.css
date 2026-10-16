@@ -352,3 +352,9 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 }
 .marker.below b { bottom: auto; top: 12px; }
 .marker.end b { left: auto; right: -4px; transform: none; }
+@media (max-width: 720px) {
+  .wide-only { display: none; }
+  .dock-group.experiment { order: 0; }
+  .dock-group.experiment .dock-label { display: none; }
+  .dock-group.experiment + .dock-group.speed { flex-basis: 100%; }
+}

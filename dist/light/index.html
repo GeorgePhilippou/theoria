@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b12">
+<meta name="description" content="Maxwell's equations, solved live: watch light radiate from an antenna, interfere through two slits and focus through a lens.">
+<title>Light as a Wave · Theoria</title>
+<link rel="stylesheet" href="../shared/shell.css">
+<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+</head>
+<body class="v2">
+<main class="stage" aria-label="Light as a wave experiment">
+  <canvas id="scene" aria-label="3D surface showing the electric field of a light wave"></canvas>
+
+  <header class="topbar">
+    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Electromagnetism · Light as a wave</span></a>
+    <nav class="view-switch" aria-label="View">
+      <button id="view-surface" class="active" aria-pressed="true">Surface</button>
+      <button id="view-top" aria-pressed="false">Top</button>
+    </nav>
+    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+    </button>
+    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+  </header>
+
+  <section class="story glass" id="story" aria-live="polite"></section>
+
+  <div class="labels" aria-hidden="true">
+    <div class="scene-label" id="label-e"><div class="tag"><span class="name"><i class="swatch" style="--c:#ffc56b"></i>E</span></div></div>
+    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#7fe0f0"></i>B</span></div></div>
+    <div class="scene-label landmark" id="label-glass"><div class="tag"><span class="name">Glass</span></div></div>
+    <div class="scene-label landmark" id="label-focus"><div class="tag"><span class="name">Focus</span></div></div>
+  </div>
+
+  <section class="readout glass" id="readout" aria-label="Measurements">
+    <div class="readout-row">
+      <i class="swatch" style="--c:#ffa848"></i>
+      <span class="who">Wavelength<small id="lambda-note"></small></span>
+      <strong id="lambda"></strong>
+    </div>
+    <div class="readout-row">
+      <i class="swatch" style="--c:#cfe6ff"></i>
+      <span class="who">Speed of light<small id="speed-note"></small></span>
+      <strong id="speed"></strong>
+    </div>
+    <div class="readout-row" id="row-ratio">
+      <i class="swatch" style="--c:#7fe0f0"></i>
+      <span class="who">E / cB at the arrows<small>measured live, peak over one period</small></span>
+      <strong id="ratio"></strong>
+    </div>
+  </section>
+
+  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
+    <span class="eyebrow">Show</span>
+    <div class="chips">
+      <button class="chip" data-layer="arrows" aria-pressed="false"><i class="swatch" style="--c:#ffc56b"></i>E &amp; B arrows</button>
+      <button class="chip" data-layer="intensity" aria-pressed="false"><i class="swatch" style="--c:#f2a07a"></i>Brightness</button>
+    </div>
+    <details class="settings" open>
+      <summary>Settings</summary>
+      <label><span>Simulation speed <output id="out-rate"></output></span>
+        <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Simulation speed"></label>
+      <p class="hint">The grid is about 9 wavelengths across. Tap the surface to add a ripple.</p>
+    </details>
+  </aside>
+
+  <footer class="transport dock glass" id="transport">
+    <button id="play" class="round-button" aria-label="Pause"></button>
+    <div class="dock-group experiment">
+      <span class="dock-label">Experiment</span>
+      <div class="segmented" role="group" aria-label="Experiment">
+        <button data-experiment="antenna">Antenna</button>
+        <button data-experiment="plane">Plane<span class="wide-only"> wave</span></button>
+        <button data-experiment="slits"><span class="wide-only">Two </span>Slits</button>
+        <button data-experiment="lens">Lens</button>
+      </div>
+    </div>
+    <div class="dock-group speed">
+      <span class="dock-label">Wavelength <output id="out-lambda"></output></span>
+      <input id="wavelength" type="range" min="14" max="34" step="1" value="20" aria-label="Wavelength">
+    </div>
+    <div class="dock-group speed" id="param-group">
+      <span class="dock-label"><span id="param-name"></span> <output id="out-param"></output></span>
+      <input id="param" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Experiment setting">
+    </div>
+    <div class="dock-actions">
+      <button id="reset" class="text-button" title="Restart (R)">Restart</button>
+      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    </div>
+  </footer>
+  <div id="tip" role="status" aria-live="polite"></div>
+  <div id="toast" role="status"></div>
+  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
+
+  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
+    <button class="icon-button close" aria-label="Close">×</button>
+    <span class="eyebrow">Behind the image</span>
+    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+    <p>Maxwell’s equations are solved live on a 220 × 220 grid with the finite-difference time-domain (Yee) method, the workhorse of optics and antenna design. In this two-dimensional version the electric field E points straight out of the plane and the magnetic field lies in it, so the height of the surface <em>is</em> the electric field.</p>
+    <span class="eq">∂B/∂t = −∇ × E,   ∂E/∂t = c² ∇ × B (in vacuum)</span>
+
+    <h3>Units and scale</h3>
+    <p>Lengths are in grid cells: one wavelength spans 14 to 34 of them. Everything scales, so the same picture holds for radio waves metres long or visible light half a micrometre long. The time step is half a cell’s light-crossing time, inside the method’s stability limit.</p>
+
+    <h3>The edges</h3>
+    <p>A graded, matched conducting border absorbs outgoing waves (less than 1% returns), so the grid behaves like open space. The border is hidden.</p>
+
+    <h3>Materials</h3>
+    <p>Glass has permittivity n² (n is the refractive index), so light inside travels at c/n. The slit wall is a perfect conductor, where the electric field is held at zero.</p>
+
+    <h3>Measurements</h3>
+    <p>“E / cB” compares the peak electric and magnetic fields at the middle of the arrow line over the last period. In a travelling light wave in air it is 1; inside glass it is 1/n.</p>
+
+    <h3>Touch and keys</h3>
+    <p>Drag to orbit, pinch or scroll to zoom, tap the surface to make a ripple, and hover to read the fields. Keys: Space pause, 1–4 experiments, T Surface/Top, R restart.</p>
+
+    <p class="honest">Drawn for clarity: colours (amber up, blue down) and the height scale, which adapts to the wave’s strength. With two slits, brightness colours are scaled to the region behind the wall and dimmed in front of it, where the light is far stronger. Because the model is 2D, it describes waves from a long line source, which fade as 1/√r rather than 1/r as in 3D, and it shows only one polarisation. The grid makes waves travel about 0.3% slower than c at the default wavelength (a known effect of the method).</p>
+
+    <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/II_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume II</a> · Taflove &amp; Hagness, <em>Computational Electrodynamics</em></p>
+    <span class="version">Theoria · Light as a wave 0.1 · 2D Maxwell FDTD</span>
+  </dialog>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

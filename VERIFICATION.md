@@ -30,3 +30,10 @@
 - Inspector checked by hand: flash 1 reaches B at t = 7.21 (r* difference), with B reading 6.74 τ.
 - Fixed in the shared line code: a buffer that grew kept its first size limit, so only the first segments drew. Special relativity also benefits.
 - Every tour step was checked at 1440×900, and the phone layout at 375×812, with no console errors. All 17 tests pass.
+
+# Light as a wave 0.1 verification (17 Oct 2026)
+
+- `npm test`: 6 light tests pass (23 in total). Measured: speed 0.997 c in vacuum and 0.663 c at n = 1.5 (0.667 expected); E/cB = 1.01.
+- Rendered in the in-app browser at 1440×900 and 375×812, with no console errors. All four experiments were run (with `?debug` stepping): antenna rings, plane wave with live E/cB ≈ 1.04 at the arrows, two-slit fringes, and lens focusing.
+- Performance: 500 simulation steps of the 220 × 220 grid took about 0.26 s in the browser (≈0.5 ms per step).
+- Not yet tested: a real iPad, screen readers.
