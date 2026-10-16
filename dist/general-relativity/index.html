@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body>
+<body class="v2">
 <main class="stage" aria-label="Curved spacetime experiment">
   <canvas id="scene" aria-label="Rotatable 3D view of space and time around a black hole"></canvas>
 
@@ -34,6 +34,7 @@
     <div class="scene-label landmark" id="label-horizon"><div class="tag"><span class="name">Event horizon · 1 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-photon"><div class="tag"><span class="name">Photon sphere · 1.5 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-isco"><div class="tag"><span class="name">Innermost stable orbit · 3 rₛ</span></div></div>
+    <div id="dynamic-labels"></div>
   </div>
 
   <section class="readout glass" id="readout" aria-label="Clock readings">
@@ -73,28 +74,38 @@
     </div>
     <details class="settings">
       <summary>Settings</summary>
-      <label><span><i class="swatch" style="--c:#f0bd86"></i>Clock A height <output id="out-a"></output></span>
-        <input id="radius-a" type="range" min="1.2" max="11" step="0.1" value="2.4" aria-label="Clock A radius"></label>
       <label><span><i class="swatch" style="--c:#9fe3ef"></i>Clock B height <output id="out-b"></output></span>
         <input id="radius-b" type="range" min="1.2" max="11" step="0.1" value="8" aria-label="Clock B radius"></label>
-      <label><span><i class="swatch" style="--c:#f4a3c8"></i>Clock C dropped from <output id="out-c"></output></span>
-        <input id="radius-c" type="range" min="1.5" max="12" step="0.1" value="6" aria-label="Clock C release radius"></label>
-      <p class="hint">Heights are distances from the centre in Schwarzschild radii (rₛ). Changing one restarts the run.</p>
+      <p class="hint">Heights are distances from the centre in Schwarzschild radii (rₛ). Changes apply immediately.</p>
     </details>
   </aside>
 
-  <footer class="transport glass" id="transport">
+  <footer class="transport dock glass" id="transport">
     <button id="play" class="round-button" aria-label="Play"></button>
     <div class="timeline">
       <div class="timeline-label">
         <span>Far-away time<b id="time-readout">0.0</b>rₛ/c</span>
         <span class="note" id="view-note"></span>
       </div>
-      <input id="scrub" type="range" min="0" max="60" step="0.05" value="0" aria-label="Far-away (coordinate) time">
+      <div class="track">
+        <input id="scrub" type="range" min="0" max="60" step="0.05" value="0" aria-label="Far-away (coordinate) time">
+        <div class="markers" id="markers" aria-hidden="true"></div>
+      </div>
     </div>
-    <button id="replay" class="text-button">Replay</button>
-    <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    <div class="dock-group speed">
+      <span class="dock-label">Clock A at <output id="out-a"></output></span>
+      <input id="radius-a" type="range" min="1.2" max="11" step="0.1" value="2.4" aria-label="Clock A radius">
+    </div>
+    <div class="dock-group speed">
+      <span class="dock-label">Drop C from <output id="out-c"></output></span>
+      <input id="radius-c" type="range" min="1.5" max="12" step="0.1" value="6" aria-label="Clock C release radius">
+    </div>
+    <div class="dock-actions">
+      <button id="replay" class="text-button" title="Replay (R)">Replay</button>
+      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    </div>
   </footer>
+  <div id="tip" role="status" aria-live="polite"></div>
 
   <div id="toast" role="status"></div>
   <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
@@ -127,10 +138,13 @@
     <h3>Time view</h3>
     <p>Two space dimensions plus coordinate time drawn upward. Ticks on each worldline are equal steps of that clock’s own time. Spatial curvature is not shown in this view; the transition between views is only a visual blend.</p>
 
-    <p class="honest">Drawn for clarity rather than to scale: marker sizes, glows, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
+    <h3>Touch and keys</h3>
+    <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash to see when and where it happened. Keys: Space play/pause, ← → step, T Space/Time, R replay.</p>
+
+    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each bead circles once per unit of that clock’s own time), the black sphere marking the horizon, glows, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
 
     <p>Further reading: <a href="https://jila.colorado.edu/~ajsh/astr3740_17/grbook.pdf" target="_blank" rel="noopener">Hamilton · General Relativity, Black Holes and Cosmology</a> · <a href="https://www.einstein-online.info/en/spacetime/" target="_blank" rel="noopener">Einstein Online · Spacetime</a></p>
-    <span class="version">Theoria · General relativity 0.2 · Schwarzschild exterior</span>
+    <span class="version">Theoria · General relativity 0.3 · Schwarzschild exterior</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>

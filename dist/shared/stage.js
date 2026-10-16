@@ -89,13 +89,17 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
       });
       material.resolution.set(innerWidth, innerHeight);
       lineMaterials.add(material);
-      const geometry = new LineSegmentsGeometry();
+      let geometry = new LineSegmentsGeometry();
       const object = new LineSegments2(geometry, material);
       object.frustumCulled = false;
       object.visible = false;
       parent.add(object);
       let capacity = 0, positions, colorsBuffer, distances;
       function grow(n) {
+        // A fresh geometry: three.js caches the instance limit of the first buffers it sees.
+        geometry.dispose();
+        geometry = new LineSegmentsGeometry();
+        object.geometry = geometry;
         capacity = Math.max(16, 2 ** Math.ceil(Math.log2(n)));
         positions = new THREE.InstancedInterleavedBuffer(new Float32Array(capacity * 6), 6, 1);
         geometry.setAttribute('instanceStart', new THREE.InterleavedBufferAttribute(positions, 3, 0));
@@ -205,4 +209,17 @@ function addSky(scene) {
   }));
   stars.renderOrder = -9;
   scene.add(stars);
+}
+
+/** Visible-spectrum colour for a wavelength in nm (a common approximation), dimmed beyond 380–750 nm. */
+export function spectrumColor(nm, target = new THREE.Color()) {
+  let r = 0, g = 0, b = 0;
+  if (nm < 440) { r = (440 - Math.max(nm, 380)) / 60; b = 1; }
+  else if (nm < 490) { g = (nm - 440) / 50; b = 1; }
+  else if (nm < 510) { g = 1; b = (510 - nm) / 20; }
+  else if (nm < 580) { r = (nm - 510) / 70; g = 1; }
+  else if (nm < 645) { r = 1; g = (645 - nm) / 65; }
+  else r = 1;
+  const edge = nm < 420 ? .35 + .65 * Math.max(0, nm - 380) / 40 : nm > 700 ? .35 + .65 * Math.max(0, 780 - nm) / 80 : 1;
+  return target.setRGB(r * edge, g * edge, b * edge, THREE.SRGBColorSpace);
 }

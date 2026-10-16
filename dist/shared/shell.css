@@ -351,3 +351,4 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
   .marker b { display: none; }
 }
 .marker.below b { bottom: auto; top: 12px; }
+.marker.end b { left: auto; right: -4px; transform: none; }

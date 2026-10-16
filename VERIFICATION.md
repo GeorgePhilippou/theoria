@@ -22,3 +22,11 @@
 - Checked in the in-app browser at 1440×900 and 375×812, with no console errors. Inspector values were verified on ship tick 8: Earth (t = 10, x = 6), ship (t′ = 8, x′ = 0), interval 8.
 - All 17 physics tests pass. Physics is unchanged.
 - Not yet tested: a real iPad (bloom cost on mobile GPUs in particular), screen readers.
+
+# General relativity 0.3: new renderer (17 Oct 2026)
+
+- Ported to shared/stage.js, and shared/scene.js removed. The page now has a lit Flamm surface, a black horizon sphere with a rim glow and a horizon tube in Time view, 3D clocks with own-time beads, glowing ray trails, and a flash ladder coloured by wavelength.
+- Bottom bar: Clock A and Drop C sliders change the scene live, with timeline markers for the first flash at B, C freezing, and the violet ray escaping. Keyboard shortcuts work, and the Time-view inspector covers 103 events at t = 40.
+- Inspector checked by hand: flash 1 reaches B at t = 7.21 (r* difference), with B reading 6.74 τ.
+- Fixed in the shared line code: a buffer that grew kept its first size limit, so only the first segments drew. Special relativity also benefits.
+- Every tour step was checked at 1440×900, and the phone layout at 375×812, with no console errors. All 17 tests pass.

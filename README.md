@@ -10,7 +10,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 
 | Concept | Folder | Status |
 |---|---|---|
-| General relativity · curved spacetime | `dist/general-relativity/` | v0.2 |
+| General relativity · curved spacetime | `dist/general-relativity/` | v0.3 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
 | Electromagnetic waves | — | next |
 | Quantum wavefunctions | — | planned |
@@ -21,8 +21,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 ## Layout
 
 - `dist/shared/shell.css`, `shell.js`: the common interface (top bar, guided-tour card, live readout, layers panel, timeline, notes dialog, labels).
-- `dist/shared/stage.js`: the v2 rendering stage (bloom, lighting, fog, thick anti-aliased lines with reusable buffers, sky). Used by special relativity.
-- `dist/shared/scene.js`: the original stage, still used by general relativity until it is ported.
+- `dist/shared/stage.js`: the rendering stage (bloom, lighting, fog, thick anti-aliased lines with reusable buffers, sky, wavelength colours), used by every concept.
 - `dist/<concept>/physics.js`: the concept's physics, with no rendering code, so it can be tested in Node.
 - `dist/<concept>/story.js`: guided-tour text and which layers each step shows.
 - `dist/<concept>/app.js`, `index.html`: the scene and page.

@@ -85,7 +85,7 @@ export function createTransport({max, speed = 2, onChange}) {
         below = m.t - previous < max * .08 ? !below : false;
         previous = m.t;
         const el = document.createElement('span');
-        el.className = below ? 'marker below' : 'marker';
+        el.className = `marker${below ? ' below' : ''}${m.t / max > .8 ? ' end' : ''}`;
         el.style.left = `${m.t / max * 100}%`;
         el.style.setProperty('--c', m.color);
         el.innerHTML = `<i></i><b>${m.label}</b>`;

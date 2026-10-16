@@ -1,7 +1,7 @@
 // Curved spacetime: the scene, its layers and the guided tour.
 import * as THREE from 'three';
-import {createStage, addStarfield, setPoints, spectrumColor} from '../shared/scene.js';
-import {$, toast, setPressed, reducedMotion, createTransport, createStory, bindDialog, positionLabel} from '../shared/shell.js';
+import {createStage, spectrumColor} from '../shared/stage.js';
+import {$, toast, setPressed, reducedMotion, createTransport, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as gr from './physics.js';
 import {steps} from './story.js';
 
@@ -11,15 +11,16 @@ const FLASH_INTERVAL = 2;      // clock A flashes every 2 units of its own time
 const EMITTED_NM = 470;        // wavelength of A's flashes as A measures it
 const STATIC_ANGLE = -0.62;    // A and B sit on one radial line, so flashes travel radially
 const FALL_ANGLE = -2.3;       // C falls on the far side, away from A, B and the horizon label
+const CLOCK_LIFT = .16;        // clocks sit just above the surface
 const COLOR = {
   a: 0xf0bd86, b: 0x9fe3ef, c: 0xf4a3c8,
-  escape: 0xcdefff, capture: 0xff9b73, photon: 0xc9b8ff, isco: 0x9cc3dd, grid: 0x7d9cb6,
+  escape: 0xcdefff, capture: 0xff9b73, photon: 0xc9b8ff, isco: 0x9cc3dd, grid: 0x6f8ca6,
 };
 
 const settings = {rA: 2.4, rB: 8, drop: 6};
 const layers = {clocks: false, signals: false, light: false, falling: false, landmarks: false};
 const narrow = () => innerWidth <= 720;
-let blend = 0, targetBlend = 0, needsUpdate = true;
+let blend = 0, targetBlend = 0;
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
@@ -33,10 +34,9 @@ const stage = createStage({
   },
 });
 const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 5, maxDistance: 90, minPolarAngle: .1, maxPolarAngle: Math.PI * .49});
-addStarfield(scene);
+Object.assign(controls, {minDistance: 4, maxDistance: 100, minPolarAngle: .08, maxPolarAngle: Math.PI * .49});
 const group = {};
-for (const name of ['base', ...Object.keys(layers)]) scene.add(group[name] = new THREE.Group());
+for (const name of ['base', 'time', ...Object.keys(layers)]) scene.add(group[name] = new THREE.Group());
 
 // In Space view a point sits on Flamm's surface; in Time view its height is coordinate time.
 const BOTTOM = -gr.embedding(R_MAX);
@@ -44,68 +44,18 @@ const timeY = t => -4 + t * .22;
 const surfaceY = r => gr.embedding(Math.max(r, 1)) + BOTTOM;
 const blendY = (r, t, lift = 0) => (surfaceY(r) + lift) * (1 - blend) + (timeY(t) + lift) * blend;
 const polar = (r, angle) => [r * Math.cos(angle), r * Math.sin(angle)];
-
-// Camera framings: the whole scene, or close in on the photon sphere and horizon.
-const orbit = (azimuth, distance, height, targetY, [cx, cz] = [0, 0]) => ({
-  position: [cx + distance * Math.cos(azimuth), height, cz + distance * Math.sin(azimuth)], target: [cx, targetY, cz],
-});
-const PHONE_CENTRE = polar(3, STATIC_ANGLE); // between the hole and clock B
-// Phones look along A and B's radial line from the far side, so A and B stack upward on a portrait screen.
-// Time-view heights are given before the Time-view lift of 3.5.
-const FRAMING = {
-  wide: () => narrow() ? orbit(STATIC_ANGLE + Math.PI, 31, 19, -4.5, PHONE_CENTRE) : orbit(.97, 26.6, 14, -2),
-  close: () => narrow() ? orbit(STATIC_ANGLE + Math.PI, 17, 7, -5.6) : orbit(.99, 16.1, 2.6, -5.6),
-  time: () => narrow() ? orbit(STATIC_ANGLE + Math.PI - 1.1, 40, 8, -1.5) : orbit(.965, 31.6, 2.5, -1.5),
-};
-let framing = 'wide', cameraTween = null;
-function home(name = framing, animate = false) {
-  framing = name;
-  const {position, target} = FRAMING[name](), lift = blend * 3.5;
-  const to = {position: new THREE.Vector3(position[0], position[1] + lift, position[2]), target: new THREE.Vector3(target[0], target[1] + lift, target[2])};
-  if (animate && !reducedMotion) {
-    cameraTween = {from: {position: camera.position.clone(), target: controls.target.clone()}, to, u: 0};
-  } else {
-    cameraTween = null;
-    camera.position.copy(to.position);
-    controls.target.copy(to.target);
-    controls.update();
-  }
-}
-function stepCameraTween(dt) {
-  if (!cameraTween) return;
-  cameraTween.u = Math.min(1, cameraTween.u + dt / 1.2);
-  const e = cameraTween.u < .5 ? 2 * cameraTween.u ** 2 : 1 - (-2 * cameraTween.u + 2) ** 2 / 2;
-  camera.position.lerpVectors(cameraTween.from.position, cameraTween.to.position, e);
-  controls.target.lerpVectors(cameraTween.from.target, cameraTween.to.target, e);
-  if (cameraTween.u === 1) cameraTween = null;
-}
-controls.addEventListener('start', () => { cameraTween = null; });
+const at = (r, angle, t, lift = 0) => { const [x, z] = polar(r, angle); return [x, blendY(r, t, lift), z]; };
 
 // ---------------------------------------------------------------- the spatial slice
-// Lines drawn on the slice. In Time view they all ride up to the "now" plane.
-const sliceLines = [];
-function sliceLine(points, color, opacity, {parent = group.base, dashed = false} = {}) {
-  const positions = new Float32Array(points.length * 3);
-  points.forEach(([x, z, r], i) => positions.set([x, surfaceY(r), z], i * 3));
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const options = {color, transparent: true, opacity, depthWrite: false};
-  const line = new THREE.Line(geometry, dashed
-    ? new THREE.LineDashedMaterial({...options, dashSize: .2, gapSize: .16})
-    : new THREE.LineBasicMaterial(options));
-  if (dashed) line.computeLineDistances();
-  line.frustumCulled = false;
-  parent.add(line);
-  sliceLines.push({line, radii: points.map(p => p[2]), opacity});
-  return line;
-}
+// Everything drawn on the slice rides up to the "now" plane in Time view.
+const slice = [];   // {set: (now) => void}
 const ring = (r, n = 180) => Array.from({length: n + 1}, (_, j) => [...polar(r, j / n * Math.PI * 2), r]);
 const spoke = (angle, r0, r1, n = 100) => Array.from({length: n + 1}, (_, j) => {
   const r = r0 + (r1 - r0) * (j / n) ** 1.5;
   return [...polar(r, angle), r];
 });
 
-// Flamm's paraboloid, exactly to scale.
+// Flamm's paraboloid, exactly to scale, as a faint surface and a thin grid.
 const surfaceRadii = [], surfaceVertices = [], surfaceIndex = [];
 {
   const nr = 90, na = 160;
@@ -125,116 +75,161 @@ const surfaceRadii = [], surfaceVertices = [], surfaceIndex = [];
 const surfaceGeometry = new THREE.BufferGeometry();
 surfaceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(surfaceVertices, 3));
 surfaceGeometry.setIndex(surfaceIndex);
-const surface = new THREE.Mesh(surfaceGeometry, new THREE.MeshBasicMaterial({
-  color: 0x8bbed2, transparent: true, opacity: .035, side: THREE.DoubleSide, depthWrite: false,
+surfaceGeometry.computeVertexNormals();
+const surface = new THREE.Mesh(surfaceGeometry, new THREE.MeshStandardMaterial({
+  color: 0x24405a, roughness: .6, metalness: .2, transparent: true, opacity: .32, side: THREE.DoubleSide, depthWrite: false,
 }));
 group.base.add(surface);
 
-for (let r = 1.5; r <= R_MAX; r += .5) sliceLine(ring(r), COLOR.grid, r % 1 === 0 ? .3 : .13);
-for (let i = 0; i < 64; i++) sliceLine(spoke(i / 64 * Math.PI * 2, 1.003, R_MAX), COLOR.grid, i % 4 ? .1 : .26);
+function thinGrid(lines, color, opacity) {
+  const positions = [], radii = [];
+  for (const pts of lines) for (let i = 0; i < pts.length - 1; i++) {
+    for (const p of [pts[i], pts[i + 1]]) { positions.push(p[0], surfaceY(p[2]), p[1]); radii.push(p[2]); }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const mesh = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({color, transparent: true, opacity, depthWrite: false}));
+  group.base.add(mesh);
+  slice.push({set(now) {
+    const a = geometry.attributes.position;
+    for (let i = 0; i < radii.length; i++) a.array[i * 3 + 1] = blendY(radii[i], now);
+    a.needsUpdate = true;
+    mesh.material.opacity = opacity * (1 - .45 * blend);
+  }});
+}
+const rings = r => ring(r);
+thinGrid(Array.from({length: 13}, (_, i) => rings(2 + i)), COLOR.grid, .34);
+thinGrid(Array.from({length: 13}, (_, i) => rings(1.5 + i)), COLOR.grid, .14);
+thinGrid(Array.from({length: 16}, (_, i) => spoke(i / 16 * Math.PI * 2, 1.003, R_MAX)), COLOR.grid, .3);
+thinGrid(Array.from({length: 64}, (_, i) => spoke(i / 64 * Math.PI * 2, 1.003, R_MAX)).filter((_, i) => i % 4), COLOR.grid, .1);
 
-// The horizon: a dark aperture with a bright rim, not an accretion disc.
-const aperture = new THREE.Mesh(new THREE.CircleGeometry(1, 120), new THREE.MeshBasicMaterial({
-  color: 0x010204, side: THREE.DoubleSide, transparent: true,
+/** A thick line lying on the slice (rings, paths), recomputed when the slice moves. */
+function sliceLine(points, options, lift = 0) {
+  const handle = stage.line(options);
+  const entry = {points, set(now) {
+    handle.set(entry.points.flatMap(([x, z, r]) => [x, blendY(r, now, lift), z]));
+  }};
+  slice.push(entry);
+  return Object.assign(handle, {entry});
+}
+
+// The horizon: a black sphere where the funnel ends, with a faint rim, and its bright edge.
+const horizon = new THREE.Group();
+horizon.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.MeshBasicMaterial({color: 0x000000})));
+horizon.add(new THREE.Mesh(new THREE.SphereGeometry(1.06, 64, 32), new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `varying vec3 vN; varying vec3 vV; void main() { float f = pow(1.0 - max(dot(vN, vV), 0.0), 4.0);
+    gl_FragColor = vec4(vec3(0.75, 0.82, 1.0) * f * 0.8, f); }`,
+})));
+group.base.add(horizon);
+sliceLine(ring(1.003), {color: 0xe2ebf3, width: 2.4, opacity: .95, parent: group.base}, .01);
+// In Time view the horizon is a surface in spacetime: a cylinder rising with far-away time.
+const horizonTube = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 64, 1, true), new THREE.MeshBasicMaterial({
+  color: 0x9fb4cf, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
 }));
-aperture.rotation.x = -Math.PI / 2;
-group.base.add(aperture);
-sliceLine(ring(1.003), 0xd6e3ee, .7);
+group.time.add(horizonTube);
 
 // Landmarks.
-sliceLine(ring(gr.PHOTON_SPHERE), COLOR.photon, .8, {parent: group.landmarks, dashed: true});
-sliceLine(ring(gr.ISCO), COLOR.isco, .5, {parent: group.landmarks, dashed: true});
+sliceLine(ring(gr.PHOTON_SPHERE), {color: COLOR.photon, width: 2, opacity: .9, dashed: true, dash: [.22, .16], parent: group.landmarks}, .01);
+sliceLine(ring(gr.ISCO), {color: COLOR.isco, width: 1.6, opacity: .6, dashed: true, dash: [.3, .22], parent: group.landmarks}, .01);
 
 // ---------------------------------------------------------------- clocks
+// A small lit clock: a dark puck with a coloured rim and a bead that circles once per unit of its own time.
 function makeClock(color, parent) {
-  const marker = new THREE.Group();
-  const face = new THREE.Mesh(new THREE.RingGeometry(.26, .32, 64), new THREE.MeshBasicMaterial({
-    color, side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false,
-  }));
-  face.rotation.x = -Math.PI / 2;
-  const hand = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, .01, 0), new THREE.Vector3(.22, .01, 0)]),
-    new THREE.LineBasicMaterial({color}));
-  marker.add(face, hand);
-  parent.add(marker);
+  const body = new THREE.Group();
+  const puck = new THREE.Mesh(new THREE.CylinderGeometry(.26, .28, .1, 48), new THREE.MeshStandardMaterial({color: 0x182330, metalness: .7, roughness: .3}));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(.29, .028, 12, 64), new THREE.MeshBasicMaterial({color}));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = .05;
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+  body.add(puck, rim, bead);
+  parent.add(body);
   return {
-    marker, hand,
+    body, bead,
     glow: stage.sprite(color, 1.1, parent),
-    worldline: stage.dynamicLine(240, color, 0, {parent}),
-    ticks: stage.dynamicLine(600, color, 0, {parent, segments: true}),
+    worldline: stage.line({color, width: 3, parent}),
+    ticks: tickMesh(color, parent),
   };
+}
+function tickMesh(color, parent) {
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.07, 12, 8),
+    new THREE.MeshBasicMaterial({color: new THREE.Color(color).multiplyScalar(.75), transparent: true}), 128);
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+  parent.add(mesh);
+  return mesh;
 }
 const clockA = makeClock(COLOR.a, group.clocks);
 const clockB = makeClock(COLOR.b, group.clocks);
 const clockC = makeClock(COLOR.c, group.falling);
-const fallPath = sliceLine(spoke(FALL_ANGLE, 1, 12, 160), COLOR.c, .45, {parent: group.falling, dashed: true});
-const fallPathRadii = sliceLines.at(-1).radii;
+const fallPath = sliceLine(spoke(FALL_ANGLE, 1, 12, 160), {color: COLOR.c, width: 1.6, opacity: .6, dashed: true, dash: [.25, .18], parent: group.falling}, .02);
 
-function placeClock(clock, x, y, z, tau, boost = 0) {
-  clock.marker.position.set(x, y, z);
-  clock.glow.position.set(x, y, z);
-  clock.hand.rotation.y = -tau * Math.PI;
+function placeClock(clock, [x, y, z], tau, boost = 0) {
+  clock.body.position.set(x, y, z);
+  clock.glow.position.set(x, y + .05, z);
+  const a = -tau * Math.PI * 2;
+  clock.bead.position.set(Math.cos(a) * .29, .06, Math.sin(a) * .29);
   const tick = Math.exp(-(tau % 1) * 5);
-  clock.glow.material.opacity = Math.min(1, .45 + .3 * tick + boost);
-  clock.glow.scale.setScalar(1.1 + .9 * boost);
+  clock.glow.material.opacity = Math.min(1, .35 + .3 * tick + boost);
+  clock.glow.scale.setScalar(1.1 + 1.1 * boost);
 }
 
-function tickMarks(x, z, times) {
-  const flat = [];
-  for (const t of times) { const y = timeY(t); flat.push(x - .17, y, z, x + .17, y, z); }
-  return flat;
+const matrix = new THREE.Matrix4();
+function setTicks(mesh, points) {
+  points.slice(0, mesh.instanceMatrix.count).forEach((p, i) => mesh.setMatrixAt(i, matrix.makeTranslation(...p)));
+  mesh.count = Math.min(points.length, mesh.instanceMatrix.count);
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.material.opacity = blend;
+  mesh.visible = blend > .02;
 }
+
+/** Events on a static clock's worldline: its ticks every unit of its own time. */
+const staticTickEvents = r => Array.from({length: 100}, (_, n) => ({tau: n + 1, t: (n + 1) / gr.rate(r), r}));
 
 function updateStaticClock(clock, r, now, boost) {
-  const [x, z] = polar(r, STATIC_ANGLE), tau = now * gr.rate(r);
-  placeClock(clock, x, blendY(r, now, .14), z, tau, boost);
-  setPoints(clock.worldline, [x, timeY(0), z, x, timeY(now), z]);
-  clock.worldline.material.opacity = .8 * blend;
-  const times = [];
-  for (let n = 0; n <= tau; n++) times.push(n / gr.rate(r));
-  setPoints(clock.ticks, tickMarks(x, z, times));
-  clock.ticks.material.opacity = .85 * blend;
+  const tau = now * gr.rate(r), [x, z] = polar(r, STATIC_ANGLE);
+  placeClock(clock, at(r, STATIC_ANGLE, now, CLOCK_LIFT), tau, boost);
+  clock.worldline.set([x, timeY(0), z, x, timeY(now), z]);
+  clock.worldline.material.opacity = .95 * blend;
+  setTicks(clock.ticks, staticTickEvents(r).filter(e => e.t <= now).map(e => [x, timeY(e.t), z]));
   return tau;
 }
 
 let fall = gr.freeFall(settings.drop);
+function fallTickEvents() {
+  const out = [];
+  for (let n = 1; n < fall.tauHorizon; n++) {
+    const e = fall.etaAtTau(n);
+    out.push({tau: n, t: fall.t(e), r: fall.r(e)});
+  }
+  return out;
+}
+let fallTicks = [];
 function updateFallingClock(now) {
   const eta = fall.etaAtT(now), r = fall.r(eta), tau = fall.tau(eta);
-  const [x, z] = polar(r, FALL_ANGLE);
-  placeClock(clockC, x, blendY(r, now, .14), z, tau);
-  // Seen from afar its light is ever more redshifted; fade the glow as it nears the horizon.
-  clockC.glow.material.opacity *= Math.min(1, .25 + (r - 1) / .4);
+  placeClock(clockC, at(r, FALL_ANGLE, now, CLOCK_LIFT), tau);
+  // Seen from afar its light is ever more redshifted; fade its glow as it nears the horizon.
+  clockC.glow.material.opacity *= Math.min(1, .2 + (r - 1) / .4);
 
   const flat = [], samples = 160;
   for (let i = 0; i <= samples; i++) {
-    const t = now * i / samples, ri = fall.r(fall.etaAtT(t)), [xi, zi] = polar(ri, FALL_ANGLE);
+    const t = now * i / samples, [xi, zi] = polar(fall.r(fall.etaAtT(t)), FALL_ANGLE);
     flat.push(xi, timeY(t), zi);
   }
-  setPoints(clockC.worldline, flat);
-  clockC.worldline.material.opacity = .85 * blend;
-
-  const ticks = [];
-  for (let n = 1; n < fall.tauHorizon; n++) {
-    const e = fall.etaAtTau(n), t = fall.t(e);
-    if (t > now) break;
-    const [xi, zi] = polar(fall.r(e), FALL_ANGLE), y = timeY(t);
-    ticks.push(xi - .17, y, zi, xi + .17, y, zi);
-  }
-  setPoints(clockC.ticks, ticks);
-  clockC.ticks.material.opacity = .9 * blend;
-
-  let shown = 0;
-  while (shown < fallPathRadii.length && fallPathRadii[shown] <= settings.drop) shown++;
-  fallPath.geometry.setDrawRange(0, shown);
-  fallPath.material.opacity = .45 * (1 - blend);
-  return {r, tau, x, z};
+  clockC.worldline.set(flat);
+  clockC.worldline.material.opacity = .95 * blend;
+  setTicks(clockC.ticks, fallTicks.filter(e => e.t <= now).map(e => { const [xi, zi] = polar(e.r, FALL_ANGLE); return [xi, timeY(e.t), zi]; }));
+  fallPath.material.opacity = .6 * (1 - blend);
+  return {r, tau};
 }
 
 // ---------------------------------------------------------------- signals from A to B
 let schedule;
-const pulses = Array.from({length: 32}, () => stage.sprite(0xffffff, .95, group.signals));
-const signalWorldlines = stage.dynamicLine(32 * 25 * 2, 0xffffff, 0, {parent: group.signals, segments: true, vertexColors: true, additive: true});
-const signalGuide = stage.dynamicLine(80, 0x8fb6ff, .22, {parent: group.signals});
+const pulses = Array.from({length: 32}, () => stage.sprite(0xffffff, 1, group.signals));
+const signalWorldlines = stage.line({width: 1.6, segments: true, vertexColors: true, additive: true, parent: group.signals});
+const signalGuide = stage.line({color: 0x8fb6ff, width: 1.2, opacity: .3, dashed: true, dash: [.2, .2], parent: group.signals});
 const colorScratch = new THREE.Color();
 
 function updateSignals(now) {
@@ -246,35 +241,30 @@ function updateSignals(now) {
     sinceEmit = now - flash.tEmit;
     if (flash.tArrive <= now) sinceArrive = now - flash.tArrive;
     else if (inFlight < pulses.length) {
-      const r = gr.signalRadius(rA, rB, now - flash.tEmit), [x, z] = polar(r, STATIC_ANGLE), pulse = pulses[inFlight++];
+      const r = gr.signalRadius(rA, rB, now - flash.tEmit), pulse = pulses[inFlight++];
       pulse.visible = true;
-      pulse.position.set(x, blendY(r, now, .16), z);
+      pulse.position.set(...at(r, STATIC_ANGLE, now, .2));
       spectrumColor(EMITTED_NM * gr.wavelengthFactor(rA, r), pulse.material.color);
     }
     if (blend > .01) {
-      const span = Math.min(now - flash.tEmit, schedule.delay), steps = 24;
+      const span = Math.min(now - flash.tEmit, schedule.delay), steps = 20;
       let previous = null;
       for (let j = 0; j <= steps; j++) {
         const s = span * j / steps, r = gr.signalRadius(rA, rB, s), [x, z] = polar(r, STATIC_ANGLE);
         const point = [x, timeY(flash.tEmit + s), z];
         spectrumColor(EMITTED_NM * gr.wavelengthFactor(rA, r), colorScratch);
-        const c = [colorScratch.r * blend, colorScratch.g * blend, colorScratch.b * blend];
-        if (previous) flat.push(...previous[0], ...point), colors.push(...previous[1], ...c);
+        const k = .55 * blend, c = [colorScratch.r * k, colorScratch.g * k, colorScratch.b * k];
+        if (previous) { flat.push(...previous[0], ...point); colors.push(...previous[1], ...c); }
         previous = [point, c];
       }
     }
   }
   for (let i = inFlight; i < pulses.length; i++) pulses[i].visible = false;
-  setPoints(signalWorldlines, flat, colors);
-  signalWorldlines.material.opacity = .9;
-
+  signalWorldlines.set(flat, colors);
   const guide = [];
-  for (let j = 0; j <= 60; j++) {
-    const r = rA + (rB - rA) * j / 60, [x, z] = polar(r, STATIC_ANGLE);
-    guide.push(x, blendY(r, now, .05), z);
-  }
-  setPoints(signalGuide, guide);
-  signalGuide.material.opacity = .22 * (1 - blend);
+  for (let j = 0; j <= 60; j++) guide.push(...at(rA + (rB - rA) * j / 60, STATIC_ANGLE, now, .05));
+  signalGuide.set(guide);
+  signalGuide.material.opacity = .3 * (1 - blend);
   return {
     boostA: layers.signals ? .7 * Math.exp(-sinceEmit * 5) : 0,
     boostB: layers.signals ? .9 * Math.exp(-sinceArrive * 4) : 0,
@@ -284,64 +274,94 @@ function updateSignals(now) {
 // ---------------------------------------------------------------- light rays
 const critical = gr.criticalImpact * (1 + 3e-5);
 const IMPACTS = [-6, -4.3, -3.2, -2.3, -1.1, 1.1, 2.2, 2.52, 2.85, 3.7, 5.2, critical];
+// Turn the rays so they cross the screen from left to right in the default framing.
+const RAY_TURN = .6;
 const rays = IMPACTS.map(b => {
   const data = gr.tracePhoton(b, b === critical ? {stepSize: .015} : {});
-  const stride = Math.ceil(data.points.length / 900);
+  const stride = Math.ceil(data.points.length / 700);
   const points = data.points.filter((_, i) => i % stride === 0);
   if (points.at(-1) !== data.points.at(-1)) points.push(data.points.at(-1));
-  const color = new THREE.Color(b === critical ? COLOR.photon : data.outcome === 'captured' ? COLOR.capture : COLOR.escape);
-  const guide = stage.dynamicLine(points.length, color, .1, {parent: group.light});
-  const trail = stage.dynamicLine(points.length, color, 1, {parent: group.light, vertexColors: true, additive: true});
-  const head = stage.sprite(color, b === critical ? .75 : .55, group.light);
-  return {data, points, color, guide, trail, head, bright: b === critical ? 1.25 : 1};
+  for (const p of points) { const a = Math.atan2(p.z, p.x) - RAY_TURN; p.wx = p.r * Math.cos(a); p.wz = p.r * Math.sin(a); }
+  const isCritical = b === critical;
+  const color = new THREE.Color(isCritical ? COLOR.photon : data.outcome === 'captured' ? COLOR.capture : COLOR.escape);
+  return {
+    data, points, color, isCritical,
+    guide: stage.line({color, width: 1, opacity: .08, parent: group.light}),
+    trail: stage.line({width: isCritical ? 3 : 2.2, vertexColors: true, additive: true, parent: group.light}),
+    head: stage.sprite(color, isCritical ? .95 : .7, group.light),
+  };
 });
-// Turn the rays so they cross the screen from left to right in the default framing.
-group.light.rotation.y = .6;
 
 function updateRays(now) {
   for (const ray of rays) {
-    const {points, color, bright} = ray, flat = new Float32Array(points.length * 3), colors = new Float32Array(points.length * 3);
-    let visible = 0;
-    points.forEach((p, i) => {
-      flat.set([p.x, blendY(p.r, p.t, .04), p.z], i * 3);
+    const flat = [], colors = [], guide = [];
+    for (const p of ray.points) {
+      const pos = [p.wx, blendY(p.r, p.t, .04), p.wz];
+      guide.push(...pos);
       const age = now - p.t;
-      if (age >= 0) visible = i + 1;
-      const glow = age >= 0 ? bright * (.16 + .3 * blend + .9 * Math.exp(-age / 2.5)) : 0;
-      colors.set([color.r * glow, color.g * glow, color.b * glow], i * 3);
-    });
-    setPoints(ray.guide, flat);
-    ray.guide.material.opacity = .11 * (1 - blend) + .04 * blend;
-    setPoints(ray.trail, flat, colors);
-    ray.trail.geometry.setDrawRange(0, visible);
+      if (age < 0) continue;
+      const k = (ray.isCritical ? 1.3 : 1) * (.42 + .25 * blend + .9 * Math.exp(-age / 2.5));
+      flat.push(...pos);
+      colors.push(ray.color.r * k, ray.color.g * k, ray.color.b * k);
+    }
+    ray.guide.set(guide);
+    ray.guide.material.opacity = .08 * (1 - blend) + .04 * blend;
+    ray.trail.set(flat, colors);
     const p = gr.sampleAt(ray.data.points, now);
     ray.head.visible = !!p;
     if (p) {
-      ray.head.position.set(p.x, blendY(p.r, now, .06), p.z);
+      const a = Math.atan2(p.z, p.x) - RAY_TURN;
+      ray.head.position.set(p.r * Math.cos(a), blendY(p.r, now, .06), p.r * Math.sin(a));
       ray.head.material.opacity = p.r < 1.1 ? (p.r - 1.015) / .085 : 1;
     }
   }
 }
 
-// ---------------------------------------------------------------- labels
+// ---------------------------------------------------------------- labels, readout, markers
 const labelPoint = new THREE.Vector3();
-const avoid = () => [$('story'), $('panel'), $('readout'), document.querySelector('.transport')]
-  .filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
-
-function updateLabels(state) {
-  const rects = avoid();
-  const pin = (id, x, y, z, show) => positionLabel($(id), labelPoint.set(x, y, z), camera, {show, avoid: rects});
-  pin('label-a', ...clockPosition(clockA), layers.clocks);
-  pin('label-b', ...clockPosition(clockB), layers.clocks);
-  pin('label-c', ...clockPosition(clockC), layers.falling);
-  const front = Math.atan2(camera.position.z, camera.position.x);
-  const at = (r, da) => { const [x, z] = polar(r, front + da); return [x, blendY(r, state.now, .02), z]; };
-  pin('label-horizon', ...at(1, 0), blend < .5);
-  pin('label-photon', ...at(gr.PHOTON_SPHERE, Math.PI), layers.landmarks && blend < .5);
-  pin('label-isco', ...at(gr.ISCO, -Math.PI / 2), layers.landmarks && blend < .5);
+const pool = {};
+function poolLabel(kind, i) {
+  pool[kind] ??= [];
+  let el = pool[kind][i];
+  if (!el) {
+    el = document.createElement('div');
+    el.className = `scene-label ${kind}`;
+    el.innerHTML = '<div class="tag"><span class="name"></span></div>';
+    $('dynamic-labels').append(el);
+    pool[kind][i] = el;
+  }
+  return el;
 }
-const clockPosition = clock => clock.marker.position.toArray();
 
-function updateReadout(state) {
+function updateLabels() {
+  const rects = [$('story'), $('panel'), $('readout'), $('transport')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
+  const pin = (el, p, show = true) => positionLabel(el, labelPoint.set(...p), camera, {show, avoid: rects});
+  const above = clock => [clock.body.position.x, clock.body.position.y + .25, clock.body.position.z];
+  pin($('label-a'), above(clockA), layers.clocks);
+  pin($('label-b'), above(clockB), layers.clocks);
+  pin($('label-c'), above(clockC), layers.falling);
+  const front = Math.atan2(camera.position.z - anchor.z, camera.position.x - anchor.x);
+  pin($('label-horizon'), at(1.02, front, state.now, .02), blend < .5);
+  pin($('label-photon'), at(gr.PHOTON_SPHERE, front + Math.PI, state.now, .02), layers.landmarks && blend < .5);
+  pin($('label-isco'), at(gr.ISCO, front - Math.PI / 2, state.now, .02), layers.landmarks && blend < .5);
+
+  // Time view: own-time labels every 10 on the static clocks.
+  let n = 0;
+  if (blend > .6 && layers.clocks) {
+    for (const [r, color] of [[settings.rA, '#f0bd86'], [settings.rB, '#9fe3ef']]) {
+      const [x, z] = polar(r, STATIC_ANGLE);
+      for (let tau = 10; tau / gr.rate(r) <= state.now; tau += 10) {
+        const el = poolLabel('tick', n++), name = el.querySelector('.name');
+        name.textContent = `${tau} τ`;
+        name.style.color = color;
+        pin(el, [x, timeY(tau / gr.rate(r)), z]);
+      }
+    }
+  }
+  for (const el of (pool.tick ?? []).slice(n)) el.style.visibility = 'hidden';
+}
+
+function updateReadout() {
   const {rA, rB} = settings;
   $('row-a').hidden = $('row-b').hidden = !layers.clocks;
   $('row-c').hidden = !layers.falling;
@@ -361,49 +381,142 @@ function updateReadout(state) {
   $('c-sub').textContent = r < 1.05
     ? `seen from afar, frozen at the horizon; its own clock reaches ${fall.tauHorizon.toFixed(1)} τ there`
     : `dropped from ${settings.drop.toFixed(1)} rₛ; reaches the horizon at ${fall.tauHorizon.toFixed(1)} τ of its own time`;
+
+  const marks = [];
+  if (layers.signals && schedule.flashes.length) marks.push({t: schedule.flashes[0].tArrive, label: 'first flash at B', color: '#8fb6ff'});
+  if (layers.falling) {
+    // Far-away time when C is within 1% of the horizon: from here on it looks frozen.
+    const eta = Math.acos(2 * 1.01 / settings.drop - 1);
+    if (Number.isFinite(eta)) marks.push({t: fall.t(eta), label: 'C freezes', color: '#f4a3c8'});
+  }
+  if (layers.light) marks.push({t: rays.at(-1).data.points.at(-1).t, label: 'violet ray escapes', color: '#c9b8ff'});
+  transport.setMarkers(marks);
 }
 
-// ---------------------------------------------------------------- frame update
-function updateSlice(now) {
-  for (const {line, radii, opacity} of sliceLines) {
-    const a = line.geometry.attributes.position;
-    for (let i = 0; i < radii.length; i++) a.array[i * 3 + 1] = blendY(radii[i], now);
-    a.needsUpdate = true;
-    line.material.opacity = opacity * (1 - .45 * blend);
+// ---------------------------------------------------------------- event inspector (Time view)
+function candidates() {
+  const list = [];
+  if (layers.clocks) {
+    for (const [name, r] of [['A', settings.rA], ['B', settings.rB]]) {
+      for (const e of staticTickEvents(r)) if (e.t <= state.now) list.push({...e, angle: STATIC_ANGLE, title: `Clock ${name} reads ${e.tau} τ`, kind: 'static'});
+    }
   }
+  if (layers.falling) for (const e of fallTicks) if (e.t <= state.now) list.push({...e, angle: FALL_ANGLE, title: `Clock C reads ${e.tau} τ`, kind: 'fall'});
+  if (layers.signals) {
+    for (const f of schedule.flashes) {
+      if (f.tArrive <= state.now) list.push({t: f.tArrive, r: settings.rB, angle: STATIC_ANGLE, title: `Flash ${f.n + 1} reaches B`, kind: 'arrive', f});
+      if (f.tEmit <= state.now) list.push({t: f.tEmit, r: settings.rA, angle: STATIC_ANGLE, title: `Flash ${f.n + 1} leaves A`, kind: 'emit', f});
+    }
+  }
+  return list;
+}
+const projected = new THREE.Vector3();
+function pick(clientX, clientY) {
+  if (blend < .6) return null;
+  let best = null, bestD = narrow() ? 22 : 16;
+  for (const k of candidates()) {
+    const [x, z] = polar(k.r, k.angle);
+    projected.set(x, timeY(k.t), z).project(camera);
+    if (projected.z > 1) continue;
+    const d = Math.hypot((projected.x * .5 + .5) * innerWidth - clientX, (-projected.y * .5 + .5) * innerHeight - clientY);
+    if (d < bestD) { bestD = d; best = {...k, pos: [x, timeY(k.t), z]}; }
+  }
+  return best;
+}
+const fmt = x => x.toFixed(2);
+function describe(k) {
+  const rows = [`<div class="row"><span>Far-away time</span><span>t = ${fmt(k.t)} rₛ/c</span></div>`,
+    `<div class="row"><span>Height</span><span>r = ${fmt(k.r)} rₛ</span></div>`];
+  let note = '';
+  if (k.kind === 'static') note = `Held still here, this clock runs at ${(gr.rate(k.r) * 100).toFixed(1)}% of the far-away rate.`;
+  if (k.kind === 'fall') note = `Falling from ${fmt(settings.drop)} rₛ. Its own time to the horizon is ${fmt(fall.tauHorizon)} τ, but far-away time to get there is infinite.`;
+  if (k.kind === 'emit') note = `Sent when A reads ${fmt(k.f.tauEmit)} τ. It takes ${fmt(schedule.delay)} rₛ/c of far-away time to climb to B.`;
+  if (k.kind === 'arrive') note = `Arrives when B reads ${fmt(k.f.tauArrive)} τ. Flashes leave A every ${FLASH_INTERVAL} τ and arrive every ${fmt(schedule.receivedInterval)} τ of B’s time.`;
+  return `<h4>${k.title}</h4>${rows.join('')}<div class="note">${note}</div>`;
+}
+const hover = stage.sprite(0xffffff, 1, scene, {opacity: 0});
+function inspect(x, y) {
+  const k = pick(x, y);
+  $('scene').classList.toggle('pointing', !!k);
+  showTip(x, y, k && describe(k));
+  hover.material.opacity = k ? .9 : 0;
+  if (k) hover.position.set(...k.pos);
+}
+let downAt = null;
+$('scene').addEventListener('pointermove', event => { if (event.pointerType === 'mouse' && !event.buttons) inspect(event.clientX, event.clientY); });
+$('scene').addEventListener('pointerdown', event => { downAt = [event.clientX, event.clientY]; });
+$('scene').addEventListener('pointerup', event => {
+  if (downAt && Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) < 6) inspect(event.clientX, event.clientY);
+});
+$('scene').addEventListener('pointerleave', () => { showTip(0, 0, null); hover.material.opacity = 0; });
+
+// ---------------------------------------------------------------- per-frame update
+const state = {now: 0, tauA: 0, tauB: 0, fall: {r: settings.drop, tau: 0}};
+let last = {now: -1, blend: -1, version: -1}, version = 0;
+function update(now) {
+  const changed = now !== last.now || blend !== last.blend || version !== last.version;
+  if (!changed) return;
+  last = {now, blend, version};
+  for (const s of slice) s.set(now);
   const a = surface.geometry.attributes.position;
   for (let i = 0; i < surfaceRadii.length; i++) a.array[i * 3 + 1] = blendY(surfaceRadii[i], now);
   a.needsUpdate = true;
-  surface.material.opacity = .035 * (1 - blend);
-  aperture.position.y = blendY(1, now) - .01;
-  aperture.material.opacity = 1 - .65 * blend;
+  surface.material.opacity = .32 * (1 - blend);
+  horizon.position.y = blendY(1, now) - .02;
+  horizon.scale.set(1, 1 - .92 * blend, 1);
+  horizonTube.scale.set(1, Math.max(.001, timeY(now) - timeY(0)), 1);
+  horizonTube.position.y = (timeY(now) + timeY(0)) / 2;
+  horizonTube.material.opacity = .06 * blend;
+  horizonTube.visible = blend > .02;
+
+  const boosts = updateSignals(now);
+  state.now = now;
+  state.tauA = updateStaticClock(clockA, settings.rA, now, boosts.boostA);
+  state.tauB = updateStaticClock(clockB, settings.rB, now, boosts.boostB);
+  state.fall = updateFallingClock(now);
+  if (layers.light) updateRays(now);
 }
 
-let last = {now: -1, blend: -1};
-function update(now) {
-  if (!needsUpdate && now === last.now && blend === last.blend) return;
-  const sliceMoved = blend !== last.blend || (blend > 0 && now !== last.now) || needsUpdate;
-  needsUpdate = false;
-  last = {now, blend};
-  if (sliceMoved) updateSlice(now);
-  const boosts = updateSignals(now);
-  const state = {
-    now,
-    tauA: updateStaticClock(clockA, settings.rA, now, boosts.boostA),
-    tauB: updateStaticClock(clockB, settings.rB, now, boosts.boostB),
-    fall: updateFallingClock(now),
-  };
-  if (layers.light) updateRays(now);
-  updateReadout(state);
-  update.state = state;
+// ---------------------------------------------------------------- camera
+// The camera orbits an anchor; each framing sets the anchor and the offset from it.
+// Phones look along A and B's radial line from the far side, so A and B stack upward on a portrait screen.
+const PHONE_AZ = STATIC_ANGLE + Math.PI, PHONE_CENTRE = polar(3, STATIC_ANGLE);
+const offsetAt = (az, d, h) => [d * Math.cos(az), h, d * Math.sin(az)];
+const FRAMING = {
+  wide: () => narrow()
+    ? {anchor: [PHONE_CENTRE[0] * 1.3, -4, PHONE_CENTRE[1] * 1.3], offset: offsetAt(PHONE_AZ, 38, 26)}
+    : {anchor: [0, -2, 0], offset: offsetAt(.97, 26.6, 16)},
+  close: () => narrow()
+    ? {anchor: [0, -5.6, 0], offset: offsetAt(PHONE_AZ, 17, 12.6)}
+    : {anchor: [0, -5.6, 0], offset: offsetAt(.99, 16.1, 8.2)},
+  follow: () => ({anchor: null, offset: narrow() ? offsetAt(FALL_ANGLE + Math.PI + .6, 13, 9) : offsetAt(FALL_ANGLE + Math.PI + .9, 9.5, 5.5)}),
+  time: () => narrow()
+    ? {anchor: [0, 2.6, 0], offset: offsetAt(PHONE_AZ - 1.1, 40, 9.5)}
+    : {anchor: [0, 2.6, 0], offset: offsetAt(.965, 31.6, 4)},
+};
+let framing = 'wide', spaceFraming = 'wide', offsetTween = null;
+const anchor = new THREE.Vector3(), anchorGoal = new THREE.Vector3(), offset = new THREE.Vector3();
+function computeAnchorGoal() {
+  const f = FRAMING[framing]();
+  if (f.anchor) return anchorGoal.set(...f.anchor);
+  // Follow C, and look a little towards the hole so the horizon stays in view.
+  const p = clockC.body.position;
+  return anchorGoal.set(p.x * .6, p.y - .5, p.z * .6);
 }
+function setFraming(name, animate = true) {
+  framing = name;
+  const to = new THREE.Vector3(...FRAMING[name]().offset);
+  if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
+  else { offset.copy(to); offsetTween = null; }
+}
+controls.addEventListener('start', () => { offsetTween = null; });
 
 // ---------------------------------------------------------------- controls
 function applyLayers(next) {
   if (next) for (const key of Object.keys(layers)) layers[key] = !!next[key];
   for (const [key, on] of Object.entries(layers)) group[key].visible = on;
   for (const chip of document.querySelectorAll('.chip')) setPressed(chip, layers[chip.dataset.layer]);
-  needsUpdate = true;
+  version++;
 }
 
 function setView(isTime, announce = false) {
@@ -411,46 +524,46 @@ function setView(isTime, announce = false) {
   if (reducedMotion) blend = targetBlend;
   setPressed($('view-space'), !isTime);
   setPressed($('view-time'), isTime);
-  $('view-note').textContent = isTime
-    ? 'Time view · height is far-away time'
-    : 'Space view · curved space, drawn to scale';
-  if (announce) toast(isTime ? 'Time runs upward. Tick marks are equal steps of each clock’s own time.'
-    : 'The surface’s depth shows how space is curved, not time.');
-  needsUpdate = true;
+  $('view-note').textContent = isTime ? 'Time view · tap a tick to inspect it' : 'Space view · curved space, drawn to scale';
+  if (announce) {
+    toast(isTime ? 'Time runs upward. Tick marks are equal steps of each clock’s own time.'
+      : 'The surface’s depth shows how space is curved, not time.');
+    setFraming(isTime ? 'time' : spaceFraming);
+  }
 }
 
 function rebuild() {
   schedule = gr.signalSchedule(settings.rA, settings.rB, {interval: FLASH_INTERVAL, tMax: T_MAX});
   fall = gr.freeFall(settings.drop);
+  fallTicks = fallTickEvents();
+  // Only the part of C's path below its release point is drawn.
+  fallPath.entry.points = spoke(FALL_ANGLE, 1, settings.drop, 120);
   $('out-a').textContent = `${settings.rA.toFixed(1)} rₛ`;
   $('out-b').textContent = `${settings.rB.toFixed(1)} rₛ`;
   $('out-c').textContent = `${settings.drop.toFixed(1)} rₛ`;
   for (const [id, key] of [['radius-a', 'rA'], ['radius-b', 'rB'], ['radius-c', 'drop']]) {
     const input = $(id);
+    input.value = settings[key];
     input.style.setProperty('--progress', `${(settings[key] - input.min) / (input.max - input.min) * 100}%`);
   }
-  needsUpdate = true;
+  version++;
 }
 
-const transport = createTransport({max: T_MAX, speed: 2, onChange: () => { needsUpdate = true; }});
+const transport = createTransport({max: T_MAX, speed: 2});
 
 $('view-space').onclick = () => setView(false, true);
 $('view-time').onclick = () => setView(true, true);
-$('reset-camera').onclick = () => home(framing, true);
+$('reset-camera').onclick = () => setFraming(targetBlend > .5 ? 'time' : spaceFraming);
 for (const chip of document.querySelectorAll('.chip')) {
-  chip.onclick = () => {
-    layers[chip.dataset.layer] = !layers[chip.dataset.layer];
-    applyLayers();
-  };
+  chip.onclick = () => { layers[chip.dataset.layer] = !layers[chip.dataset.layer]; applyLayers(); };
 }
+// Heights change live, without restarting the run.
 for (const [id, key] of [['radius-a', 'rA'], ['radius-b', 'rB'], ['radius-c', 'drop']]) {
   $(id).addEventListener('input', event => {
     settings[key] = +event.target.value;
-    // Make sure the clock being moved is on screen.
     const layer = key === 'drop' ? 'falling' : 'clocks';
     if (!layers[layer]) applyLayers({...layers, [layer]: true});
     rebuild();
-    transport.restart();
   });
 }
 function showPanel(open) {
@@ -460,47 +573,70 @@ function showPanel(open) {
 $('panel-toggle').onclick = () => showPanel($('panel').classList.contains('sheet-closed'));
 bindDialog($('notes'), $('about'), () => transport.setPlaying(false));
 stage.onContextLost = () => transport.setPlaying(false);
-addEventListener('resize', () => { needsUpdate = true; });
-document.addEventListener('visibilitychange', () => { lastFrame = performance.now(); });
+const toggleView = () => setView(targetBlend < .5, true);
+bindKeys({
+  ' ': () => transport.toggle(),
+  ArrowRight: () => transport.nudge(1),
+  ArrowLeft: () => transport.nudge(-1),
+  t: toggleView, T: toggleView,
+  r: () => transport.restart(), R: () => transport.restart(),
+});
 
 const story = createStory({
   steps,
   onEnter(step, index) {
-    if (step.view) setView(step.view === 'time');
+    spaceFraming = step.camera ?? 'wide';
+    setView(step.view === 'time');
     applyLayers(step.layers);
-    home(step.camera ?? 'wide', true);
     showPanel(index === steps.length - 1 && !narrow());
+    setFraming(step.view === 'time' ? 'time' : spaceFraming);
+    showTip(0, 0, null);
     transport.restart();
   },
 });
 
 rebuild();
-home('wide');
+update(0);
+offset.set(...FRAMING.wide().offset);
+anchor.copy(computeAnchorGoal());
+controls.target.copy(anchor);
+camera.position.copy(anchor).add(offset);
+controls.update();
 story.show(0);
-// Panels change size with each tour step; keep the scene centred in the free space.
 new ResizeObserver(() => stage.resize()).observe($('story'));
 new ResizeObserver(() => stage.resize()).observe($('readout'));
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--dock-h', `${$('transport').offsetHeight}px`);
+  stage.resize();
+}).observe($('transport'));
 
-let lastFrame = performance.now(), cameraBlend = blend;
+let lastFrame = performance.now();
 function frame(time) {
   requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min((time - lastFrame) / 1000, .08));
   lastFrame = time;
   if (!document.hidden) transport.tick(dt);
   if (blend !== targetBlend) {
-    blend += (targetBlend - blend) * Math.min(1, dt * 4);
+    blend += (targetBlend - blend) * Math.min(1, dt * 3.5);
     if (Math.abs(blend - targetBlend) < 1e-3) blend = targetBlend;
   }
-  // Rise with the "now" plane so Time view stays framed.
-  const lift = (blend - cameraBlend) * 3.5;
-  camera.position.y += lift;
-  controls.target.y += lift;
-  if (cameraTween) for (const v of [cameraTween.to.position, cameraTween.to.target]) v.y += lift;
-  cameraBlend = blend;
-  stepCameraTween(dt);
-  controls.update();
   update(transport.t);
-  updateLabels(update.state);
+
+  controls.update();
+  offset.copy(camera.position).sub(controls.target);
+  if (offsetTween) {
+    offsetTween.u = Math.min(1, offsetTween.u + dt / 1.3);
+    const k = offsetTween.u < .5 ? 2 * offsetTween.u ** 2 : 1 - (-2 * offsetTween.u + 2) ** 2 / 2;
+    offset.lerpVectors(offsetTween.from, offsetTween.to, k);
+    if (offsetTween.u === 1) offsetTween = null;
+  }
+  anchor.lerp(computeAnchorGoal(), reducedMotion ? 1 : Math.min(1, dt * 4));
+  controls.target.copy(anchor);
+  camera.position.copy(anchor).add(offset);
+  stage.setFogFor(offset.length());
+
+  updateReadout();
+  updateLabels();
   stage.render();
 }
 requestAnimationFrame(frame);

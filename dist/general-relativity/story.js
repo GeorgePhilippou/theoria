@@ -33,7 +33,7 @@ export const steps = [
       <p>Measured by distant time, it slows and <b>freezes just above the horizon</b>, its clock creeping towards a value it never quite shows.</p>`,
     notice: 'C’s counter stalls, while far-away time keeps running.',
     maths: 'proper time to the horizon is finite; coordinate time t → ∞',
-    view: 'space', camera: 'close', layers: {falling: true, landmarks: true},
+    view: 'space', camera: 'follow', layers: {falling: true, landmarks: true},
   },
   {
     title: 'Time as a direction.',
