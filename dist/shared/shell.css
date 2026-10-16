@@ -282,3 +282,72 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 
 /* Long text values in the readout (e.g. "back first, by 1.50 s") use a smaller size. */
 .readout-row strong.text-value { font-size: 15px; letter-spacing: 0; text-align: right; }
+
+/* ---------------------------------------------------------------- v2 controls (dock, markers, tooltip) */
+.dock { gap: 22px; padding: 10px 14px 10px 12px; }
+.dock .timeline { min-width: 200px; }
+.track { position: relative; }
+.markers { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; pointer-events: none; }
+.marker { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.marker i { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px rgba(7, 11, 18, .9), 0 0 10px var(--c); }
+.marker b {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 10.5px; font-weight: 500; color: var(--ink-2); letter-spacing: .02em;
+  text-shadow: 0 0 6px var(--bg), 0 0 3px var(--bg);
+}
+.dock-group { display: flex; flex-direction: column; gap: 5px; flex: none; }
+.dock-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-4); white-space: nowrap; }
+.dock-label output { color: var(--ink); letter-spacing: 0; text-transform: none; font-size: 13px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.dock-group.speed { width: 190px; }
+.dock-group.speed input[type=range] { height: 22px; }
+.dock-actions { display: flex; gap: 14px; flex: none; }
+.segmented { display: flex; padding: 3px; gap: 2px; border-radius: 999px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line); }
+.segmented button { padding: 5px 13px; border-radius: 999px; font-size: 13px; color: var(--ink-3); transition: background .25s, color .25s; white-space: nowrap; }
+.segmented button.active { background: #e6f2f7; color: #08111b; font-weight: 550; }
+.segmented button:not(.active):hover { color: var(--ink); }
+
+#tip {
+  position: absolute; z-index: 7; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s;
+  padding: 10px 14px; border-radius: 12px; background: rgba(10, 15, 24, .94); border: 1px solid var(--glass-border);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.5; max-width: 300px; box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+}
+#tip.visible { opacity: 1; }
+#tip h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+#tip .row { display: flex; justify-content: space-between; gap: 14px; font-variant-numeric: tabular-nums; }
+#tip .row span:first-child { color: var(--ink-3); }
+#tip .note { margin-top: 6px; color: var(--ink-3); font-size: 12px; }
+
+.v2 .scene-label.tick .name { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.v2 .scene-label.tick .tag { transform: translate(10px, -50%); }
+.v2 .scene-label.axis .name { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: none; color: var(--ink-3); }
+.v2 .scene-label.axis .tag { transform: translate(-100%, -50%); padding-right: 8px; }
+.v2 .scene-label.curve .name { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.v2 .scene-label.curve .tag { transform: translate(-50%, -140%); }
+.v2 .readout { width: 300px; }
+.v2 .panel { bottom: 96px; }
+.v2 #scene { cursor: grab; }
+.v2 #scene:active { cursor: grabbing; }
+.v2 #scene.pointing { cursor: pointer; }
+
+@media (max-width: 1080px) {
+  .dock { gap: 14px; }
+  .dock-group.speed { width: 150px; }
+}
+@media (max-width: 860px) {
+  .dock { flex-wrap: wrap; row-gap: 8px; }
+  .dock .timeline { flex: 1 1 calc(100% - 60px); order: 0; }
+  .dock-group, .dock-actions { order: 1; }
+  .dock-group.speed { flex: 1; width: auto; }
+}
+@media (max-width: 720px) {
+  .dock-label { font-size: 10px; }
+  .segmented button { padding: 4px 9px; font-size: 12px; }
+  .dock-actions { gap: 8px; }
+  .dock-actions #replay { display: none; }
+  .dock-group.speed { flex: 1 1 110px; min-width: 0; }
+  .dock-actions { margin-left: auto; }
+  .dock-label output { font-size: 12px; }
+  .v2 .readout, .v2 .panel { bottom: calc(var(--dock-h, 140px) + 26px); }
+  .marker b { display: none; }
+}
+.marker.below b { bottom: auto; top: 12px; }

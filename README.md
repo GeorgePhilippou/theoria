@@ -11,7 +11,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 | Concept | Folder | Status |
 |---|---|---|
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.2 |
-| Special relativity · moving clocks | `dist/special-relativity/` | v0.1 |
+| Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
 | Electromagnetic waves | — | next |
 | Quantum wavefunctions | — | planned |
 | Entropy and the arrow of time | — | planned |
@@ -21,12 +21,13 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 ## Layout
 
 - `dist/shared/shell.css`, `shell.js`: the common interface (top bar, guided-tour card, live readout, layers panel, timeline, notes dialog, labels).
-- `dist/shared/scene.js`: Three.js stage, starfield, glow sprites, dynamic lines, wavelength colours.
+- `dist/shared/stage.js`: the v2 rendering stage (bloom, lighting, fog, thick anti-aliased lines with reusable buffers, sky). Used by special relativity.
+- `dist/shared/scene.js`: the original stage, still used by general relativity until it is ported.
 - `dist/<concept>/physics.js`: the concept's physics, with no rendering code, so it can be tested in Node.
 - `dist/<concept>/story.js`: guided-tour text and which layers each step shows.
 - `dist/<concept>/app.js`, `index.html`: the scene and page.
 - `tests/<concept>.test.js`: physics tests against analytic results.
-- `dist/vendor/`, `dist/fonts/`: self-hosted Three.js 0.186.1 and Inter; no CDN.
+- `dist/vendor/`, `dist/fonts/`: self-hosted Three.js 0.186.1 (plus its line and post-processing add-ons in `vendor/jsm/`) and Inter; no CDN.
 
 ## Work locally
 

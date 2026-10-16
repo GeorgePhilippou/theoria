@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body>
+<body class="v2">
 <main class="stage" aria-label="Special relativity experiment">
   <canvas id="scene" aria-label="Rotatable 3D view of space and time for a moving ship and Earth"></canvas>
 
@@ -31,15 +31,10 @@
     <div class="scene-label" id="label-earth"><div class="tag"><span class="name"><i class="swatch" style="--c:#f0bd86"></i>Earth</span></div></div>
     <div class="scene-label" id="label-ship"><div class="tag"><span class="name"><i class="swatch" style="--c:#9fe3ef"></i>Ship</span></div></div>
     <div class="scene-label landmark" id="label-cone"><div class="tag"><span class="name">Light cone</span></div></div>
+    <div id="dynamic-labels"></div>
   </div>
 
   <section class="readout glass" id="readout" aria-label="Readings in the chosen frame">
-    <div class="frame-switch" role="group" aria-label="Seen from">
-      <span>Seen from</span>
-      <button id="frame-earth" class="active" aria-pressed="true">Earth</button>
-      <button id="frame-ship" aria-pressed="false">Ship</button>
-      <button id="frame-return" aria-pressed="false" hidden>Ship, returning</button>
-    </div>
     <div class="readout-row">
       <i class="swatch" style="--c:#f0bd86"></i>
       <span class="who">Earth’s clock<small id="earth-where"></small></span>
@@ -69,25 +64,41 @@
     </div>
     <details class="settings">
       <summary>Settings</summary>
-      <label><span><i class="swatch" style="--c:#9fe3ef"></i>Ship speed <output id="out-v"></output></span>
-        <input id="speed" type="range" min="0.1" max="0.98" step="0.01" value="0.6" aria-label="Ship speed as a fraction of light speed"></label>
       <label class="toggle"><input id="round-trip" type="checkbox"> Round trip (turn around at Earth time 10 s)</label>
-      <p class="hint">Distances in light-seconds, times in seconds. The ship is 4 light-seconds long at rest. Changing a setting restarts the run.</p>
+      <p class="hint">Distances in light-seconds, times in seconds. The ship is 4 light-seconds long at rest.</p>
     </details>
   </aside>
 
-  <footer class="transport glass" id="transport">
+  <footer class="transport dock glass" id="transport">
     <button id="play" class="round-button" aria-label="Play"></button>
     <div class="timeline">
       <div class="timeline-label">
         <span>Time in this frame<b id="time-readout">0.0</b>s</span>
         <span class="note" id="view-note"></span>
       </div>
-      <input id="scrub" type="range" min="0" max="26" step="0.02" value="0" aria-label="Time in the chosen frame">
+      <div class="track">
+        <input id="scrub" type="range" min="0" max="26" step="0.02" value="0" aria-label="Time in the chosen frame">
+        <div class="markers" id="markers" aria-hidden="true"></div>
+      </div>
     </div>
-    <button id="replay" class="text-button">Replay</button>
-    <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    <div class="dock-group">
+      <span class="dock-label">Seen from</span>
+      <div class="segmented" role="group" aria-label="Seen from">
+        <button id="frame-earth" class="active" aria-pressed="true">Earth</button>
+        <button id="frame-ship" aria-pressed="false">Ship</button>
+        <button id="frame-return" aria-pressed="false" hidden>Ship ↩</button>
+      </div>
+    </div>
+    <div class="dock-group speed">
+      <span class="dock-label">Ship speed <output id="out-v"></output></span>
+      <input id="speed" type="range" min="0.1" max="0.98" step="0.01" value="0.6" aria-label="Ship speed as a fraction of light speed">
+    </div>
+    <div class="dock-actions">
+      <button id="replay" class="text-button" title="Replay (R)">Replay</button>
+      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    </div>
   </footer>
+  <div id="tip" role="status" aria-live="polite"></div>
 
   <div id="toast" role="status"></div>
   <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
@@ -115,13 +126,16 @@
     <h3>Round trip</h3>
     <p>The ship turns around instantly at Earth time 10 s (ship time 8 s at 0.6 c) and is home at 20 s, having aged 16 s. Real ships accelerate gradually; that changes the details at the turn, not the result. “Seen from: Ship, returning” uses the inertial frame of the return leg. During the turn itself the ship has no single inertial frame, so the ship’s body is drawn rigid within each leg.</p>
 
+    <h3>Touch and keys</h3>
+    <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash event to see its coordinates in both frames. Keys: Space play/pause, ← → step, F switch frame, T Space/Time, R replay.</p>
+
     <h3>Invariants</h3>
     <p>The light cone (t² = x² + y²) and the curves t² − x² = constant are the same in every frame, so they stay still while events slide along them.</p>
 
-    <p class="honest">Drawn for clarity: marker sizes, glows and colours, and the 45° light cone (it relies on drawing 1 s of time and 1 ls of space at the same size). The view shows coordinates, not what a camera would see: light-travel delays, Doppler shifts and the visual rotation of fast objects are not rendered.</p>
+    <p class="honest">Drawn for clarity: the size of Earth (shown far too small to be to scale, but contracted correctly when it moves), its spin (tied to its own clock but sped up), the ship’s shape, glows and colours, and the 45° light cone (it relies on drawing 1 s of time and 1 ls of space at the same size). The view shows coordinates, not what a camera would see: light-travel delays, Doppler shifts and the visual rotation of fast objects are not rendered.</p>
 
     <p>Further reading: <a href="https://www.einstein-online.info/en/category/elementary/special-relativity-elementary/" target="_blank" rel="noopener">Einstein Online · Special relativity</a> · Taylor &amp; Wheeler, <em>Spacetime Physics</em></p>
-    <span class="version">Theoria · Special relativity 0.1 · Flat spacetime, motion along one line</span>
+    <span class="version">Theoria · Special relativity 0.2 · Flat spacetime, motion along one line</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>

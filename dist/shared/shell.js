@@ -62,6 +62,36 @@ export function createTransport({max, speed = 2, onChange}) {
       if (state.t >= max) setPlaying(false);
       render();
     },
+    /** Moves the time by dt and pauses (for keyboard stepping). */
+    nudge(dt) {
+      setPlaying(false);
+      state.t = Math.max(0, Math.min(max, state.t + dt));
+      render();
+      onChange?.();
+    },
+    toggle() { play.onclick(); },
+    /** Labelled marks on the timeline: [{t, label, color}]. */
+    setMarkers(list) {
+      const box = $('markers');
+      if (!box) return;
+      const key = list.map(m => `${m.label}@${m.t.toFixed(2)}`).join('|');
+      if (box.dataset.key === key) return;
+      box.dataset.key = key;
+      box.innerHTML = '';
+      let previous = -Infinity, below = false;
+      for (const m of [...list].sort((a, b) => a.t - b.t)) {
+        if (m.t < 0 || m.t > max) continue;
+        // Labels closer than ~8% of the track alternate above and below it.
+        below = m.t - previous < max * .08 ? !below : false;
+        previous = m.t;
+        const el = document.createElement('span');
+        el.className = below ? 'marker below' : 'marker';
+        el.style.left = `${m.t / max * 100}%`;
+        el.style.setProperty('--c', m.color);
+        el.innerHTML = `<i></i><b>${m.label}</b>`;
+        box.append(el);
+      }
+    },
   };
   setPlaying(false);
   render();
@@ -150,4 +180,28 @@ export function positionLabel(el, point, camera, {show = true, avoid = []} = {})
   el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
   el.classList.toggle('flip', x > innerWidth - 230 && innerWidth > 720);
   el.style.visibility = off || covered ? 'hidden' : 'visible';
+}
+
+/** Keyboard shortcuts, ignored while typing or when a dialog is open. */
+export function bindKeys(map) {
+  addEventListener('keydown', event => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.target.closest?.('input[type=text], textarea, dialog[open]')) return;
+    const action = map[event.key] ?? map[event.code];
+    if (!action) return;
+    if (event.target.matches?.('input[type=range]') && event.key.startsWith('Arrow')) return;
+    event.preventDefault();
+    action(event);
+  });
+}
+
+/** A small floating card next to the pointer, e.g. for inspecting an event. */
+export function showTip(x, y, html) {
+  const tip = $('tip');
+  if (!html) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = html;
+  tip.classList.add('visible');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const left = Math.min(innerWidth - w - 12, x + 16), top = Math.max(12, Math.min(innerHeight - h - 12, y - h - 12));
+  tip.style.transform = `translate(${left}px, ${top}px)`;
 }

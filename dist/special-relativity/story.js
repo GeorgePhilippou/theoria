@@ -9,7 +9,7 @@ export const steps = [
       <p>Seen from Earth ${sw(SWATCH.earth)}, the ship moves, so the light runs along a <b>longer, slanted path</b>. Light’s speed is the same for everyone, so each tick must take longer.</p>`,
     notice: 'The zig-zag trail, and the ship’s clock falling behind Earth’s.',
     maths: 'Δt = γ Δτ,  γ = 1 / √(1 − v²/c²)',
-    frame: 'earth', trip: 'cruise', view: 'space', layers: {clock: true},
+    frame: 'earth', trip: 'cruise', view: 'space', camera: 'follow', layers: {clock: true},
   },
   {
     title: 'Time as a direction.',
@@ -25,7 +25,7 @@ export const steps = [
       <p>From Earth, the back is rushing towards the light and the front is running away from it, so <b>the back is lit first</b>. Both views are right: “at the same time” depends on who is asking.</p>`,
     notice: 'The readout shows when each end is lit, in this frame.',
     maths: 'Earth: Δt = γ v L₀ / c²   Ship: Δt′ = 0',
-    frame: 'earth', trip: 'cruise', view: 'space', layers: {flash: true},
+    frame: 'earth', trip: 'cruise', view: 'space', camera: 'follow', layers: {flash: true},
   },
   {
     title: 'Change your point of view.',
@@ -54,8 +54,8 @@ export const steps = [
   {
     eyebrow: 'Explore freely',
     title: 'Your experiment.',
-    body: `<p>Change the ship’s speed in <b>Settings</b>, switch <b>Seen from</b>, and turn layers on and off.</p>
+    body: `<p>Drag the <b>ship speed</b>, switch <b>Seen from</b>, and turn layers on and off. In Time view, tap any tick to see its coordinates in both frames.</p>
       <p>Try 0.95 c, where γ is over 3, or a round trip seen from the returning ship. The <b>i</b> button explains what is calculated.</p>`,
-    frame: 'earth', trip: 'cruise', view: 'space', layers: {clock: true, flash: true, simultaneity: true, invariants: true},
+    frame: 'earth', trip: 'cruise', view: 'space', camera: 'overview', layers: {clock: true, flash: true, simultaneity: true, invariants: true},
   },
 ];
