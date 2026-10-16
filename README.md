@@ -11,8 +11,8 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 | Concept | Folder | Status |
 |---|---|---|
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.2 |
-| Special relativity | — | planned |
-| Electromagnetic waves | — | planned |
+| Special relativity · moving clocks | `dist/special-relativity/` | v0.1 |
+| Electromagnetic waves | — | next |
 | Quantum wavefunctions | — | planned |
 | Entropy and the arrow of time | — | planned |
 
@@ -53,6 +53,20 @@ Schwarzschild exterior of a non-rotating, uncharged mass; units r_s = c = 1. Eve
 Tests cover analytic limits, the null constraint, capture/escape, mirror symmetry, step convergence, the post-Newtonian deflection series to third order, near-critical winding, the tortoise inverse and radial light speed, redshift spacing, the free-fall geodesic equations and the finite-τ/infinite-t horizon approach.
 
 References: Andrew Hamilton, *General Relativity, Black Holes, and Cosmology*, https://jila.colorado.edu/~ajsh/astr3740_17/grbook.pdf ; Misner, Thorne & Wheeler, *Gravitation*, §31.10; Einstein Online, *Spacetime*, https://www.einstein-online.info/en/spacetime/ .
+
+## Special relativity: scientific scope
+
+Flat spacetime, c = 1, distances in light-seconds and times in seconds; motion along x only.
+
+- **Frames**: every event is computed once in Earth's frame and shown in the chosen frame by an exact Lorentz boost. Switching frames animates the rapidity, so every intermediate picture is itself a valid inertial frame.
+- **Light clock**: mirrors 0.5 ls apart across the motion, so one tick is 1 s of ship time. The photon moves at c in every frame, and its Earth-frame zig-zag gives Δt = γΔτ.
+- **Flash**: emitted at the ship's centre at ship time 4 s. It reaches both ends together in the ship's frame; on Earth the back is lit first, by γvL₀.
+- **Length**: L = L₀/γ, from cutting the ship's worldsheet along each frame's "now".
+- **Round trip**: an instant turn at Earth time 10 s. The traveller ages 2·10/γ. The jump in the ship's "now" at the turn is 2v²·10. The ship body is drawn rigid within each leg; the instant turn itself is idealised.
+- **Invariants**: the light cone and the hyperbolae t² − x² = s² are drawn once and are the same in every frame.
+- Not rendered: what a camera would see (light-travel delay, Doppler shift, Terrell rotation).
+
+Tests check γ and rapidity addition, interval invariance under boosts, light speed c in both frames, the light-clock tick, simultaneity and contraction, reciprocal dilation, the twin result and the simultaneity jump.
 
 ## Licensing
 

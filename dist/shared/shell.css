@@ -123,6 +123,18 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .readout-row .sub { grid-column: 2 / 4; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 #row-far strong { font-size: 17px; color: var(--ink-2); }
 
+/* Segmented control inside the readout, e.g. "Seen from" */
+.frame-switch { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 0 10px; }
+.frame-switch > span { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); margin-right: 6px; }
+.frame-switch button {
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--ink-3);
+  transition: background .2s, color .2s;
+}
+.frame-switch button.active { background: rgba(255, 255, 255, .12); color: var(--ink); border-color: rgba(255, 255, 255, .3); }
+.frame-switch + .readout-row { border-top: 1px solid rgba(255, 255, 255, .07); }
+.settings .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin: 10px 0 4px; cursor: pointer; }
+.settings .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+
 /* Layers & settings panel */
 .panel {
   position: absolute; z-index: 4;
@@ -251,7 +263,7 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
   .story-nav { margin-top: 12px; }
   .panel { left: 12px; right: 12px; width: auto; bottom: 86px; }
   .readout {
-    top: auto; bottom: 86px; left: 12px; right: 12px; width: auto; padding: 6px 12px;
+    top: auto; bottom: 98px; left: 12px; right: 12px; width: auto; padding: 6px 12px;
     display: flex; flex-wrap: wrap; gap: 4px 14px;
   }
   .readout-row { display: flex; gap: 6px; align-items: center; border: 0; padding: 2px 0; }
@@ -267,3 +279,6 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Long text values in the readout (e.g. "back first, by 1.50 s") use a smaller size. */
+.readout-row strong.text-value { font-size: 15px; letter-spacing: 0; text-align: right; }

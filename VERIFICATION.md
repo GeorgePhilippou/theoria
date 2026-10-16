@@ -6,3 +6,10 @@
 - Every guided-tour step was exercised, plus explore mode, the Space/Time switch, timeline scrubbing, the layers panel and the notes dialog. Camera framings (wide, close, time) and the phone layout were checked.
 - Frame rate in the in-app browser was about 118 fps with all layers on.
 - Not yet tested: physical iPad or iPhone Safari, multi-touch gestures, sustained mobile performance, screen readers.
+
+# Special relativity 0.1 verification (17 Oct 2026)
+
+- `npm test`: 8 special relativity tests pass, alongside the 9 general relativity tests.
+- Rendered in the in-app browser at 1440×900 and 375×812, with no console errors.
+- Checked: the Earth-frame clocks (9.00 against 7.20 s at 0.6 c), the 3.20 ls contracted length, and the ship-frame reciprocity (Earth 11.20 at ship 14.00). The flash reaches both ends at 6.00 s in the ship's frame. The round trip gives 22.0 against 18.0 at t = 22. The frame transition shows valid intermediate frames.
+- Not yet tested: physical iPad or iPhone, multi-touch, screen readers.
