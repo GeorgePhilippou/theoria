@@ -1,9 +1,8 @@
-# Prototype 0.1 verification
+# General relativity 0.2 verification (16 Oct 2026)
 
-- `npm test`: 3 test groups pass. Analytic clock/embedding limits; photon null-constraint error below 1e-6 for tested impact parameters; correct capture/escape on either side of the critical impact parameter; increasing coordinate time, mirror symmetry and convergence against half-step integration.
-- `node --check dist/app.js`: passed.
-- Actual WebGL rendering inspected in the Codex in-app browser.
-- Layout inspected at 1024×768 (tablet landscape), 820×1180 (tablet portrait), and 390×844 (narrow screen). Both default clocks visible in the revised narrow framing; no horizontal document overflow.
-- Browser controls exercised: Space/Time, play/pause, timeline scrub including t=60, clock-radius changes, model notes open/close, reset camera and pointer orbit drag.
-- An early dynamic tick-buffer warning was repaired by preallocating the tick geometry. No later rendering warnings were observed after reload; browser logs retain the earlier warnings.
-- Touch uses Three.js OrbitControls' one-finger orbit / two-finger zoom conventions. Physical iPad Safari, multi-touch gestures and sustained mobile performance have not been tested.
+- `npm test`: 9 tests pass. They cover analytic clock and embedding limits; the null constraint below 1e-6; capture/escape on either side of b_c; mirror symmetry; step convergence; deflection at b = 7 against the third-order post-Newtonian series (within 0.0015 rad); near-critical winding with closest approach at 1.5 r_s; the tortoise inverse and dr/dt = 1 − 1/r; redshift spacing; free fall obeying dr/dτ and dt/dτ; and finite proper time with unbounded coordinate time at the horizon.
+- `node --check` passes for all shared and concept modules.
+- Rendered in the Claude in-app browser at 1440×900, 1280×800, 800×600 and 375×812 (phone). No console errors.
+- Every guided-tour step was exercised, plus explore mode, the Space/Time switch, timeline scrubbing, the layers panel and the notes dialog. Camera framings (wide, close, time) and the phone layout were checked.
+- Frame rate in the in-app browser was about 118 fps with all layers on.
+- Not yet tested: physical iPad or iPhone Safari, multi-touch gestures, sustained mobile performance, screen readers.

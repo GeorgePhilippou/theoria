@@ -1,4 +1,4 @@
-name: Test and publish Interval
+name: Test and publish Theoria
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm test
-      - run: node --check dist/app.js
+      - run: for f in dist/shared/*.js dist/*/app.js dist/*/physics.js dist/*/story.js; do node --check "$f"; done
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

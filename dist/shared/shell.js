@@ -1,0 +1,153 @@
+// Interface pieces shared by every Theoria concept: transport, guided tour, notes dialog, labels.
+
+export const $ = id => document.getElementById(id);
+export const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let toastTimer;
+export function toast(message, ms = 3800) {
+  const el = $('toast');
+  el.textContent = message;
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('visible'), ms);
+}
+
+export function setPressed(button, on) {
+  button.classList.toggle('active', on);
+  button.setAttribute('aria-pressed', String(on));
+}
+
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
+
+/** Play/pause, timeline scrubber and replay. Time advances by `speed` units per second. */
+export function createTransport({max, speed = 2, onChange}) {
+  const play = $('play'), scrub = $('scrub'), readout = $('time-readout');
+  const state = {t: 0, playing: false};
+  scrub.max = max;
+  const render = () => {
+    scrub.value = state.t;
+    scrub.style.setProperty('--progress', `${state.t / max * 100}%`);
+    readout.textContent = state.t.toFixed(1);
+  };
+  const setPlaying = on => {
+    state.playing = on;
+    play.innerHTML = on ? ICON_PAUSE : ICON_PLAY;
+    play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+  };
+  play.onclick = () => {
+    if (state.t >= max) state.t = 0;
+    setPlaying(!state.playing);
+  };
+  scrub.addEventListener('input', () => {
+    setPlaying(false);
+    state.t = +scrub.value;
+    render();
+    onChange?.();
+  });
+  $('replay').onclick = () => transport.restart();
+  const transport = {
+    get t() { return state.t; },
+    get playing() { return state.playing; },
+    setPlaying,
+    restart(autoplay = !reducedMotion) {
+      state.t = 0;
+      setPlaying(autoplay);
+      render();
+      onChange?.();
+    },
+    tick(dt) {
+      if (!state.playing) return;
+      state.t = Math.min(max, state.t + dt * speed);
+      if (state.t >= max) setPlaying(false);
+      render();
+    },
+  };
+  setPlaying(false);
+  render();
+  return transport;
+}
+
+/**
+ * Guided tour. Each step has a title, body (trusted HTML), optional `notice` and `maths`.
+ * `onEnter(step, index)` applies the step to the scene.
+ */
+export function createStory({steps, onEnter}) {
+  const root = $('story');
+  root.innerHTML = `
+    <div class="story-head">
+      <span class="eyebrow" id="story-count"></span>
+      <button class="story-collapse" id="story-collapse" aria-expanded="true" aria-controls="story-body" aria-label="Hide explanation">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10l5-5 5 5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="story-body" id="story-body">
+      <h1 id="story-title"></h1>
+      <div class="story-text" id="story-text"></div>
+      <button class="more-toggle" id="story-more" aria-expanded="false">What to look for, and the maths</button>
+      <p class="notice" id="story-notice"></p>
+      <p class="maths" id="story-maths"></p>
+      <div class="story-nav">
+        <button class="text-button" id="story-back">Back</button>
+        <div class="dots" id="story-dots" aria-hidden="true"></div>
+        <button class="primary-button" id="story-next">Next</button>
+      </div>
+    </div>`;
+  const dots = $('story-dots');
+  steps.forEach(() => dots.append(document.createElement('i')));
+  let index = 0;
+
+  function show(i) {
+    index = Math.max(0, Math.min(steps.length - 1, i));
+    const step = steps[index], last = index === steps.length - 1;
+    $('story-count').textContent = step.eyebrow ?? `Guided tour · ${index + 1} of ${steps.length - 1}`;
+    $('story-title').innerHTML = step.title;
+    $('story-text').innerHTML = step.body;
+    $('story-notice').innerHTML = step.notice ? `<span>Look for</span>${step.notice}` : '';
+    $('story-notice').hidden = !step.notice;
+    $('story-maths').innerHTML = step.maths ? `<span>The maths</span>${step.maths}` : '';
+    $('story-maths').hidden = !step.maths;
+    $('story-more').hidden = !step.notice && !step.maths;
+    $('story-back').hidden = index === 0;
+    $('story-next').textContent = last ? 'Restart tour' : index === steps.length - 2 ? 'Explore freely' : 'Next';
+    [...dots.children].forEach((dot, j) => dot.classList.toggle('on', j === index));
+    root.dataset.step = index;
+    onEnter(step, index);
+  }
+  $('story-more').onclick = () => {
+    const open = root.classList.toggle('more');
+    $('story-more').setAttribute('aria-expanded', String(open));
+    $('story-more').textContent = open ? 'Show less' : 'What to look for, and the maths';
+  };
+  $('story-back').onclick = () => show(index - 1);
+  $('story-next').onclick = () => show(index === steps.length - 1 ? 0 : index + 1);
+  $('story-collapse').onclick = () => {
+    const open = root.classList.toggle('collapsed') === false;
+    $('story-collapse').setAttribute('aria-expanded', String(open));
+    $('story-collapse').setAttribute('aria-label', open ? 'Hide explanation' : 'Show explanation');
+  };
+  return {show, get index() { return index; }};
+}
+
+/** Opens the notes dialog from `button`; clicking the backdrop closes it. */
+export function bindDialog(dialog, button, onOpen) {
+  button.onclick = () => { dialog.showModal(); onOpen?.(); };
+  dialog.querySelector('.close').onclick = () => dialog.close();
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
+  });
+}
+
+/** Places an HTML label over a 3D point. Hidden when behind the camera, off-screen or covered by `avoid` rectangles. */
+export function positionLabel(el, point, camera, {show = true, avoid = []} = {}) {
+  if (!show) { el.style.visibility = 'hidden'; return; }
+  const p = point.clone().project(camera);
+  const x = (p.x * .5 + .5) * innerWidth, y = (-p.y * .5 + .5) * innerHeight;
+  const covered = avoid.some(r => r && x > r.left - 12 && x < r.right + 12 && y > r.top - 12 && y < r.bottom + 12);
+  const off = p.z > 1 || x < 8 || x > innerWidth - 60 || y < 60 || y > innerHeight - 110;
+  el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+  el.classList.toggle('flip', x > innerWidth - 230 && innerWidth > 720);
+  el.style.visibility = off || covered ? 'hidden' : 'visible';
+}
