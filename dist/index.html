@@ -2,13 +2,149 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Theoria</title>
-<meta http-equiv="refresh" content="0; url=general-relativity/">
-<link rel="canonical" href="general-relativity/">
-<style>body{background:#070b12;color:#bccad7;font:15px/1.6 system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0}a{color:#a9dfee}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b12">
+<meta name="description" content="Theoria: interactive, scientifically accurate visual models of the ideas that shape physics.">
+<title>Theoria · Science you can see</title>
+<link rel="stylesheet" href="shared/shell.css">
+<link rel="stylesheet" href="shared/home.css">
 </head>
-<body>
-<p>Opening <a href="general-relativity/">Curved spacetime</a>…</p>
+<body class="home">
+<header class="home-top">
+  <a class="wordmark" href="./"><b>THEORIA</b></a>
+  <a class="home-about" href="#about">About</a>
+</header>
+
+<main>
+  <section class="hero">
+    <span class="eyebrow">θεωρία · “a looking at”</span>
+    <h1>Science you can see.</h1>
+    <p>Interactive models of the ideas that shape physics. Each one is built on the real equations, explained in plain language first, with the maths one tap away.</p>
+  </section>
+
+  <section class="concepts" aria-label="Concepts">
+    <a class="concept live" href="general-relativity/">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 320 180">
+          <g fill="none" stroke="#7d9cb6" stroke-opacity=".5">
+            <ellipse cx="160" cy="70" rx="150" ry="40"/>
+            <ellipse cx="160" cy="80" rx="110" ry="29"/>
+            <ellipse cx="160" cy="92" rx="72" ry="19"/>
+            <ellipse cx="160" cy="106" rx="42" ry="11"/>
+            <ellipse cx="160" cy="120" rx="22" ry="6"/>
+            <path d="M10 70 Q120 90 138 120 M310 70 Q200 90 182 120"/>
+          </g>
+          <ellipse cx="160" cy="128" rx="14" ry="4" fill="#010204" stroke="#d6e3ee" stroke-opacity=".8"/>
+          <path d="M0 40 C120 40 140 95 175 100 C215 106 230 60 320 30" fill="none" stroke="#cdefff" stroke-width="1.6"/>
+          <path d="M0 58 C100 58 150 112 160 118" fill="none" stroke="#ff9b73" stroke-width="1.4"/>
+          <circle cx="225" cy="88" r="4" fill="#f0bd86"/><circle cx="268" cy="72" r="4" fill="#9fe3ef"/>
+        </svg>
+      </figure>
+      <div class="concept-text">
+        <span class="status">Live · v0.2</span>
+        <h2>Curved spacetime</h2>
+        <p>Why clocks run slow near a black hole, how light bends and is captured, and what falling in really means.</p>
+        <span class="go">Open <span aria-hidden="true">→</span></span>
+      </div>
+    </a>
+
+    <div class="concept soon">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 320 180">
+          <g stroke="#7d9cb6" stroke-opacity=".45" fill="none">
+            <path d="M40 160 L280 160 M160 170 L160 10"/>
+            <path d="M80 170 L240 10 M240 170 L80 10" stroke-dasharray="4 5" stroke="#f3e2a0" stroke-opacity=".7"/>
+          </g>
+          <path d="M160 170 L200 10" stroke="#9fe3ef" stroke-width="1.6"/>
+          <path d="M60 175 L280 120" stroke="#9fe3ef" stroke-width="1.2" stroke-opacity=".6"/>
+          <g fill="#9fe3ef"><circle cx="170" cy="130" r="3"/><circle cx="180" cy="90" r="3"/><circle cx="190" cy="50" r="3"/></g>
+        </svg>
+      </figure>
+      <div class="concept-text">
+        <span class="status">Coming next</span>
+        <h2>Special relativity</h2>
+        <p>Moving clocks, shrinking rulers, and why two observers can disagree about “now” and both be right.</p>
+      </div>
+    </div>
+
+    <div class="concept soon">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 320 180">
+          <path d="M20 90 L300 90" stroke="#7d9cb6" stroke-opacity=".45"/>
+          <path d="M20 90 C40 40 60 40 80 90 S120 140 140 90 S180 40 200 90 S240 140 260 90 S290 50 300 70" fill="none" stroke="#ffcf7d" stroke-width="1.6"/>
+          <path d="M20 90 C45 110 55 110 80 90 S115 70 140 90 S175 110 200 90 S235 70 260 90 S285 105 300 98" fill="none" stroke="#8fb6ff" stroke-width="1.6"/>
+        </svg>
+      </figure>
+      <div class="concept-text">
+        <span class="status">Planned</span>
+        <h2>Light as a wave</h2>
+        <p>Electric and magnetic fields chasing each other through space, from an antenna to a rainbow.</p>
+      </div>
+    </div>
+
+    <div class="concept soon">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 320 180">
+          <path d="M70 20 L70 76 M70 86 L70 94 M70 104 L70 160" stroke="#7d9cb6" stroke-opacity=".7" stroke-width="3"/>
+          <g fill="#c9b8ff">
+            <rect x="250" y="20" width="6" height="140" fill-opacity=".08"/>
+            <rect x="250" y="80" width="6" height="20" fill-opacity=".9"/>
+            <rect x="250" y="58" width="6" height="14" fill-opacity=".55"/><rect x="250" y="108" width="6" height="14" fill-opacity=".55"/>
+            <rect x="250" y="38" width="6" height="12" fill-opacity=".25"/><rect x="250" y="130" width="6" height="12" fill-opacity=".25"/>
+          </g>
+          <g fill="none" stroke="#c9b8ff" stroke-opacity=".35">
+            <circle cx="70" cy="81" r="40"/><circle cx="70" cy="81" r="80"/><circle cx="70" cy="81" r="120"/>
+            <circle cx="70" cy="99" r="40"/><circle cx="70" cy="99" r="80"/><circle cx="70" cy="99" r="120"/>
+          </g>
+        </svg>
+      </figure>
+      <div class="concept-text">
+        <span class="status">Planned</span>
+        <h2>Quantum waves</h2>
+        <p>The double slit, tunnelling through walls, and the shapes of the hydrogen atom’s orbitals.</p>
+      </div>
+    </div>
+
+    <div class="concept soon">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 320 180">
+          <rect x="20" y="20" width="280" height="140" fill="none" stroke="#7d9cb6" stroke-opacity=".45"/>
+          <path d="M100 20 L100 160" stroke="#7d9cb6" stroke-opacity=".3" stroke-dasharray="4 5"/>
+          <g fill="#f0bd86">
+            <circle cx="40" cy="40" r="3"/><circle cx="62" cy="58" r="3"/><circle cx="45" cy="80" r="3"/><circle cx="80" cy="45" r="3"/><circle cx="70" cy="110" r="3"/><circle cx="35" cy="135" r="3"/><circle cx="85" cy="140" r="3"/>
+          </g>
+          <g fill="#9fe3ef" fill-opacity=".8">
+            <circle cx="140" cy="50" r="3"/><circle cx="190" cy="120" r="3"/><circle cx="240" cy="70" r="3"/><circle cx="270" cy="140" r="3"/><circle cx="210" cy="35" r="3"/><circle cx="160" cy="100" r="3"/><circle cx="280" cy="45" r="3"/>
+          </g>
+        </svg>
+      </figure>
+      <div class="concept-text">
+        <span class="status">Planned</span>
+        <h2>Entropy and time’s arrow</h2>
+        <p>Watch order dissolve in a gas of colliding particles, and see why it never runs backwards.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="principles" id="about">
+    <div>
+      <h3>Real equations</h3>
+      <p>Every motion on screen comes from the actual physics, with automated tests against known results.</p>
+    </div>
+    <div>
+      <h3>Plain language first</h3>
+      <p>A short guided tour explains what to look for. The maths is there for anyone who wants it.</p>
+    </div>
+    <div>
+      <h3>Honest pictures</h3>
+      <p>Each model says what is calculated and what is only drawn for clarity, such as colours, glows and sizes.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="home-foot">
+  <span>Theoria · runs in any modern browser, no account needed</span>
+  <a href="https://github.com/GeorgePhilippou/theoria" target="_blank" rel="noopener">Source on GitHub</a>
+</footer>
 </body>
 </html>

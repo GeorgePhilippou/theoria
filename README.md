@@ -2,9 +2,9 @@
 
 Theoria (θεωρία, "looking at", the root of both *theory* and *theatre*) is a collection of interactive, scientifically accurate visual models. Each concept leads with a plain-language guided tour, with the exact physics one tap away.
 
-Play: https://georgephilippou.github.io/interval-spacetime/ (the repository and URL will be renamed to Theoria once the home page exists)
+Play: https://georgephilippou.github.io/theoria/
 
-Source: https://github.com/GeorgePhilippou/interval-spacetime
+Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime`; the old repository link redirects, the old site address does not)
 
 ## Concepts
 
@@ -16,7 +16,7 @@ Source: https://github.com/GeorgePhilippou/interval-spacetime
 | Quantum wavefunctions | — | planned |
 | Entropy and the arrow of time | — | planned |
 
-`dist/index.html` currently redirects to general relativity; it becomes the home page next.
+`dist/index.html` is the home page, with a card per concept.
 
 ## Layout
 
