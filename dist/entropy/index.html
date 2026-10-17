@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b12">
+<meta name="description" content="A gas of colliding atoms, simulated live: watch order spread, speeds settle and heat flow, then run time backwards and see why it never happens by itself.">
+<title>Entropy and Time’s Arrow · Theoria</title>
+<link rel="stylesheet" href="../shared/shell.css">
+<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+</head>
+<body class="v2">
+<main class="stage" aria-label="Entropy experiment">
+  <canvas id="scene" aria-label="3D view of a box of colliding gas atoms"></canvas>
+
+  <header class="topbar">
+    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Thermodynamics · Entropy and time’s arrow</span></a>
+    <nav class="view-switch" aria-label="View">
+      <button id="view-surface" class="active" aria-pressed="true">3D</button>
+      <button id="view-top" aria-pressed="false">Top</button>
+    </nav>
+    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+    </button>
+    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+  </header>
+
+  <section class="story glass" id="story" aria-live="polite"></section>
+
+  <div class="labels" aria-hidden="true">
+    <div class="scene-label landmark" id="label-wall"><div class="tag"><span class="name">Wall</span></div></div>
+    <div class="scene-label landmark" id="label-hist"><div class="tag"><span class="name">Speeds of the atoms · slow → fast</span></div></div>
+    <div class="scene-label landmark" id="label-mb"><div class="tag"><span class="name">Maxwell–Boltzmann</span></div></div>
+    <div class="scene-label" id="label-atom"><div class="tag"><span class="name"><i class="swatch" style="--c:#ffffff"></i><span id="label-atom-text">One atom</span></span></div></div>
+  </div>
+
+  <section class="readout glass" id="readout" aria-label="Measurements">
+    <div class="readout-row"><i class="swatch" style="--c:#a9dfee"></i><span class="who">Entropy gained<small id="r1-note">per atom, in units of k</small></span><strong id="r1"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#ffb46b"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#c9b8ff"></i><span class="who">Odds of going back by chance<small>about e<sup>−N ΔS/k</sup></small></span><strong id="r3" class="text-value"></strong></div>
+    <div class="chart" aria-hidden="true">
+      <canvas id="chart"></canvas>
+      <div class="chart-key"><span><i class="key fwd"></i>forwards</span><span><i class="key back"></i>backwards</span><span><i class="key max"></i>maximum</span></div>
+    </div>
+  </section>
+
+  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
+    <span class="eyebrow">Show</span>
+    <div class="chips">
+      <button class="chip" data-layer="cells" aria-pressed="false"><i class="swatch" style="--c:#6f9bc4"></i>Counting cells</button>
+      <button class="chip" data-layer="histogram" aria-pressed="false"><i class="swatch" style="--c:#ffd08a"></i>Speed chart</button>
+      <button class="chip" data-layer="origin" aria-pressed="false"><i class="swatch" style="--c:#7fe0f0"></i>Colour by starting side</button>
+      <button class="chip" data-layer="track" aria-pressed="false"><i class="swatch" style="--c:#ffffff"></i>Follow one atom</button>
+    </div>
+    <details class="settings" open>
+      <summary>Settings</summary>
+      <label class="toggle"><input type="checkbox" id="nudge"> Nudge one atom by a millionth of its width when reversing</label>
+      <label><span>Simulation speed <output id="out-rate"></output></span>
+        <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Simulation speed"></label>
+      <p class="hint">Atoms are discs of soft rubber, in 2D. Colour shows speed: blue slow, amber fast.</p>
+    </details>
+  </aside>
+
+  <footer class="transport dock glass" id="transport">
+    <button id="play" class="round-button" aria-label="Pause"></button>
+    <div class="dock-group experiment">
+      <span class="dock-label">Experiment</span>
+      <div class="segmented" role="group" aria-label="Experiment">
+        <button data-experiment="spread">Spread</button>
+        <button data-experiment="speeds">Speeds</button>
+        <button data-experiment="heat">Heat</button>
+      </div>
+    </div>
+    <div class="dock-group speed">
+      <span class="dock-label">Atoms <output id="out-atoms"></output></span>
+      <input id="atoms" type="range" min="100" max="600" step="50" value="400" aria-label="Number of atoms">
+    </div>
+    <div class="dock-group clock">
+      <span class="dock-label">Time <output id="out-time"></output></span>
+      <span class="direction" id="direction"></span>
+    </div>
+    <div class="dock-actions">
+      <button id="reverse" class="text-button reverse-button" title="Reverse time (B)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4L2.5 8 6 12M3 8h7.5a3 3 0 0 1 0 6H9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Reverse
+      </button>
+      <button id="reset" class="text-button" title="Restart (R)">Restart</button>
+      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    </div>
+  </footer>
+  <div id="tip" role="status" aria-live="polite"></div>
+  <div id="toast" role="status"></div>
+  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
+
+  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
+    <button class="icon-button close" aria-label="Close">×</button>
+    <span class="eyebrow">Behind the image</span>
+    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+    <p>A two-dimensional gas of 100 to 600 atoms in a 24 × 14 box is simulated live by molecular dynamics. Atoms are discs (radius 0.16) that repel like stiff springs when they touch, and the walls do the same. Units: mass m = 1, Boltzmann’s constant k = 1, and the average temperature is kT = 1.</p>
+    <span class="eq">x<sub>n+1</sub> − 2x<sub>n</sub> + x<sub>n−1</sub> = round(F(x<sub>n</sub>) Δt² / m)</span>
+
+    <h3>Exactly reversible</h3>
+    <p>Positions are stored as whole numbers (steps of 10⁻⁷ units), and every force kick is rounded to a whole number before it is applied (the Levesque–Verlet method). Each step then depends only on the current positions, so flipping the velocities retraces every step bit for bit, with no rounding drift. In ordinary floating-point simulations, rounding errors alone would spoil the reversal.</p>
+
+    <h3>The nudge</h3>
+    <p>With the nudge on, the followed atom is moved sideways by 3 × 10⁻⁷ units (about a millionth of its width) at the moment of reversal. The gas is chaotic: the tiny error grows with each collision until the reversed motion bears no relation to the forward one.</p>
+
+    <h3>Entropy</h3>
+    <p>The entropy shown is coarse-grained, per atom, in units of k: the box is divided into 8 × 5 counting cells, and S = −Σ p ln p over the share of atoms p in each cell; speeds are counted in rings in each of four vertical strips, which captures hot and cold regions. Both terms are corrected for the finite number of atoms (Miller–Madow). For free expansion it rises by ln 2 ≈ 0.69 per atom, and for the hot and cold halves by ln(T<sub>f</sub>/√(T<sub>hot</sub>T<sub>cold</sub>)), as thermodynamics predicts; the automated tests check both.</p>
+
+    <h3>The odds</h3>
+    <p>By Boltzmann’s formula, a state lower in entropy by ΔS per atom is about e<sup>−NΔS/k</sup> times less likely. For 400 atoms that have spread through the whole box, the chance of all of them being found in the left half again is 2<sup>−400</sup> ≈ 1 in 10<sup>120</sup>.</p>
+
+    <h3>Touch and keys</h3>
+    <p>Drag to orbit, pinch or scroll to zoom, hover over an atom to read it, click to follow it. Keys: Space pause, 1–3 experiments, B reverse, T 3D/Top, R restart.</p>
+
+    <p class="honest">Drawn for clarity: colours (blue slow, amber fast), the glow on the followed atom and the height of the speed chart, which rescales to fit. On phones the atoms are drawn 1.7 times larger than their true size. Real gases are 3D and hugely larger (about 10<sup>22</sup> atoms in a litre of air), which makes the odds of going backwards unimaginably smaller still. The atoms here are classical; quantum effects are left out.</p>
+
+    <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/I_46.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 46</a> · Sean Carroll, <em>From Eternity to Here</em></p>
+    <span class="version">Theoria · Entropy 0.1 · Reversible molecular dynamics</span>
+  </dialog>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

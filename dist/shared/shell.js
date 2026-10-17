@@ -114,7 +114,7 @@ export function createStory({steps, onEnter}) {
     <div class="story-body" id="story-body">
       <h1 id="story-title"></h1>
       <div class="story-text" id="story-text"></div>
-      <button class="more-toggle" id="story-more" aria-expanded="false">What to look for, and the maths</button>
+      <button class="more-toggle" id="story-more" aria-expanded="false"><span class="wide-only">What to look for, and the maths</span><span class="narrow-only">Read more</span></button>
       <p class="notice" id="story-notice"></p>
       <p class="maths" id="story-maths"></p>
       <div class="story-nav">
@@ -137,7 +137,8 @@ export function createStory({steps, onEnter}) {
     $('story-notice').hidden = !step.notice;
     $('story-maths').innerHTML = step.maths ? `<span>The maths</span>${step.maths}` : '';
     $('story-maths').hidden = !step.maths;
-    $('story-more').hidden = !step.notice && !step.maths;
+    // On phones the toggle also reveals the second paragraph.
+    $('story-more').hidden = !step.notice && !step.maths && (step.body.match(/<p>/g) ?? []).length < 2;
     $('story-back').hidden = index === 0;
     $('story-next').textContent = last ? 'Restart tour' : index === steps.length - 2 ? 'Explore freely' : 'Next';
     [...dots.children].forEach((dot, j) => dot.classList.toggle('on', j === index));
@@ -147,7 +148,7 @@ export function createStory({steps, onEnter}) {
   $('story-more').onclick = () => {
     const open = root.classList.toggle('more');
     $('story-more').setAttribute('aria-expanded', String(open));
-    $('story-more').textContent = open ? 'Show less' : 'What to look for, and the maths';
+    $('story-more').innerHTML = open ? 'Show less' : '<span class="wide-only">What to look for, and the maths</span><span class="narrow-only">Read more</span>';
   };
   $('story-back').onclick = () => show(index - 1);
   $('story-next').onclick = () => show(index === steps.length - 1 ? 0 : index + 1);

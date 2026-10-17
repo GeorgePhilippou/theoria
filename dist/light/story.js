@@ -23,7 +23,7 @@ export const steps = [
     title: 'Waves add up.',
     body: `<p>Send a wave at a wall with two narrow slits. Each slit becomes a new source, and their waves overlap.</p>
       <p>Where crest meets crest the waves add into a <b>bright</b> band. Where crest meets trough they cancel into a <b>dark</b> one. The colours now show the average brightness.</p>`,
-    notice: 'Bright and dark bands fan out. Narrow the slit gap and they spread further apart.',
+    notice: 'Bright and dark bands fan out and land on the screen at the far side. Narrow the slit gap and they spread further apart.',
     maths: 'bright where d sin θ = m λ',
     experiment: 'slits', view: 'surface', layers: {intensity: true},
   },

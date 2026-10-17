@@ -44,3 +44,14 @@
 - Performance: the column FFT rewrite cut a 256² step from 11.2 ms to 3.6 ms in Node. The app uses 256 × 128 (about 1.7 ms per step; about 4 ms per step in the browser including drawing).
 - Rendered at 1440×900 and 375×812, with no console errors. Packet and Measure collapse, two-slit fringes building from dots, tunnelling (37.0% on the coarse on-screen grid against 39.3% from theory), and 2p and 4f orbitals were all checked.
 - Known to refine: the scene is cramped on a phone while the tour card is open.
+
+# Entropy 0.1, light 0.2, quantum 0.2 (17 Oct 2026)
+
+- `npm test`: 6 entropy tests pass (35 in total). Across three seeds: free expansion gains 0.67–0.71 per atom (ln 2 = 0.693); heat flow gains 0.45–0.51 against the textbook 0.44–0.48; equal-speed starts reach S within 0.05 of the maximum.
+- Reversal: exact (every integer position matches) after 16 time units forwards and back, both in tests and in the app ("Back to the start, exactly"). With the nudge, 68% of atoms are in the left half when the clock returns to zero. Note: reversing early (before about t = 12) brings most of the gas back even with a nudge, because the bulk flow has not yet thermalised; the tour reverses at t = 16.
+- The heat run sloshes (a sound wave) before settling, so the test averages over 10 time units.
+- Light 0.2: the camera is fitted to the window's shape, there is a visible antenna or emitter, and a screen strip and curve show the two-slit fringes; the wave in front of the slit wall is drawn smaller.
+- Quantum 0.2: a lab-grid sheet and a rim give the wave context, and the camera is fitted to the window.
+- Shared: on phones the tour card shows only its first paragraph (Read more for the rest), which fixes the cramped phone layouts. The home page Light and Quantum cards were links closed with the wrong tag; fixed.
+- Checked in the in-app browser at 1440×900 and 375×812, with no console errors.
+- Not yet tested: a real iPad or iPhone, screen readers.

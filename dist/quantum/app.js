@@ -36,7 +36,7 @@ const stage = createStage({
   },
 });
 const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 4, maxDistance: 70});
+Object.assign(controls, {minDistance: 4, maxDistance: 110});
 const group = {wave: new THREE.Group(), props: new THREE.Group(), dots: new THREE.Group(), atom: new THREE.Group()};
 for (const g of Object.values(group)) scene.add(g);
 
@@ -96,6 +96,7 @@ const surfaceMaterial = new THREE.ShaderMaterial({
   uniforms: {
     map: {value: texture}, texel: {value: new THREE.Vector2(1 / NX, 1 / NY)}, cell: {value: DX * S},
     heightScale: {value: HEIGHT}, phaseMix: {value: 1}, edge: {value: new THREE.Vector2(ABSORB / NX, ABSORB / NY)},
+    size: {value: new THREE.Vector2(LX, LY)},
     light: {value: new THREE.Vector3(.35, 1, .5).normalize()},
   },
   vertexShader: `
@@ -116,7 +117,7 @@ const surfaceMaterial = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: `
-    uniform float phaseMix; uniform vec2 edge; uniform vec3 light;
+    uniform float phaseMix; uniform vec2 edge, size; uniform vec3 light;
     varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying vec4 vData;
     vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }
     void main() {
@@ -125,7 +126,11 @@ const surfaceMaterial = new THREE.ShaderMaterial({
       if (alpha <= 0.0) discard;
       float a = vData.r;
       float phase = atan(vData.b * 2.0 - 1.0, vData.g * 2.0 - 1.0) / 6.2831853 + 0.5;
-      vec3 dark = vec3(0.07, 0.1, 0.16);
+      // An empty region is a dark sheet with a faint grid, 8 units apart, that fades where the wave is.
+      vec2 q = vUv * size / 8.0;
+      vec2 g = abs(fract(q - 0.5) - 0.5) / fwidth(q);
+      float grid = 1.0 - min(min(g.x, g.y), 1.0);
+      vec3 dark = mix(vec3(0.09, 0.12, 0.18), vec3(0.24, 0.32, 0.44), grid * 0.6);
       vec3 hue = hsv(phase, 0.6, 0.95);
       vec3 plain = vec3(0.72, 0.9, 1.0);
       vec3 base = mix(dark, mix(plain, hue, phaseMix), smoothstep(0.0, 0.9, pow(a, 0.75)));
@@ -145,6 +150,9 @@ group.wave.add(new THREE.Mesh(surfaceGeometry, surfaceMaterial));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.05;
   group.wave.add(floor);
+  // A faint rim round the simulated region (the absorbing margin outside it is hidden).
+  const x = (LX / 2 - ABSORB * DX) * S, z = (LY / 2 - ABSORB * DX) * S;
+  stage.line({color: 0x8fb3d4, width: 1.2, opacity: .35, parent: group.wave}).set([-x, .01, -z, x, .01, -z, x, .01, z, -x, .01, z, -x, .01, -z]);
 }
 
 // ---------------------------------------------------------------- props: walls, barrier, energy line, detector screen
@@ -409,9 +417,15 @@ const FRAMING = {
 const offset = new THREE.Vector3(), target = new THREE.Vector3();
 let offsetTween = null;
 const TARGETS = {slits: [2, 0, 0]};
+/** Pulls the camera back on narrow-aspect windows so the whole simulated area stays in view. */
+function fitted(v, name) {
+  if (name === 'atom') return v;
+  const halfWidth = (LX / 2 - ABSORB * DX) * S + .5, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : 1.35) / v.length()));
+}
 function setFraming(name, animate = true) {
   target.set(...(TARGETS[name] ?? [0, 0, 0]));
-  const to = new THREE.Vector3(...FRAMING[name]());
+  const to = fitted(new THREE.Vector3(...FRAMING[name]()), name);
   if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
   else { offset.copy(to); offsetTween = null; }
 }
@@ -519,7 +533,7 @@ const story = createStory({
   },
 });
 
-offset.set(...FRAMING.surface());
+offset.copy(fitted(new THREE.Vector3(...FRAMING.surface()), 'surface'));
 camera.position.copy(target).add(offset);
 controls.target.copy(target);
 controls.update();

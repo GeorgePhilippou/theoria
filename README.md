@@ -12,9 +12,9 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 |---|---|---|
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.3 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
-| Light as a wave · electromagnetism | `dist/light/` | v0.1 |
-| Quantum waves · quantum mechanics | `dist/quantum/` | v0.1 |
-| Entropy and the arrow of time | — | next |
+| Light as a wave · electromagnetism | `dist/light/` | v0.2 |
+| Quantum waves · quantum mechanics | `dist/quantum/` | v0.2 |
+| Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.1 |
 
 `dist/index.html` is the home page, with a card per concept.
 
@@ -75,6 +75,7 @@ Maxwell's equations in 2D TM form (Ez out of plane, H in plane), solved with the
 - Experiments: a point source (antenna), a plane wave from a line source, two slits in a metal wall, and a biconvex lens (n adjustable). The marked focus uses the thick-lens formula.
 - The surface height and colour are Ez (tanh-compressed and auto-scaled for display); brightness is a running time average of Ez².
 - Arrows show Ez and (Hx, Hy) along one line, straight from the simulation; "E/cB" compares their peaks over a period.
+- Behind two slits, a screen strip and curve show the time-averaged Ez² arriving along the far edge (auto-scaled to its own peak).
 - Not modelled: 3D (2D waves fade as 1/√r), the other polarisation, dispersion in glass. The grid makes waves about 0.3% slow.
 
 Tests check: pulse speed c and c/n, wavelength λ/n in glass, E/cB = 1 and 1/n with B ⟂ the direction of travel, energy conservation in a metal box, < 1% reflection from the border, and a dark fringe where the path difference is λ/2.
@@ -89,6 +90,20 @@ The time-dependent Schrödinger equation (ħ = m = 1) on a 256 × 128 grid (128 
 - **Atom:** exact hydrogen orbitals Rₙₗ·Y with real harmonics (1s to 4f), drawn as 16–26k rejection-sampled positions, coloured by the sign of ψ.
 
 Tests check: FFT against a direct DFT, norm conservation (1e-10), packet drift ħk/m and spreading σ√(1+(t/2σ²)²), tunnelling within 1% of theory on a fine grid, radial normalisation and ⟨r⟩ for six orbitals, 1s–2s orthogonality, and the 2p node.
+
+## Entropy and the arrow of time: scientific scope
+
+A 2D gas of 100–600 soft discs (radius 0.16, spring repulsion k = 4000) in a 24 × 14 box, m = k_B = 1, mean kT = 1, time step 0.004. Positions and half-step velocities are integers (units of 10⁻⁷), and every force kick is rounded to an integer before it is applied (Levesque–Verlet). Each step therefore depends only on the current positions, and reversing the velocities retraces the run bit for bit.
+
+- **Spread:** all atoms in the left half; a middle wall stands until t = 1. The wall is part of the time-dependent Hamiltonian, so it also returns during a reversed run.
+- **Speeds:** every atom starts at speed √2 in a random direction; the speeds relax to the 2D Maxwell–Boltzmann distribution f(v) = (v/kT) e^(−v²/2kT).
+- **Heat:** left half at kT = 2, right half at 0.25.
+- **Reverse:** flips every velocity (v ← −v − a, so the next step undoes the last). The optional nudge moves one atom by 3 × 10⁻⁷ first.
+- **Entropy (per atom, in k):** coarse-grained. Positions: −Σ p ln p over 8 × 5 cells. Speeds: −Σ p ln(p/A) over speed rings of area A in each of four vertical strips, weighted by each strip's share of atoms. Both terms use the Miller–Madow correction. The maximum is ln 40 + ln(2πe kT).
+- **Odds of a return by chance:** e^(−N ΔS), from Boltzmann's relation.
+- Illustrative only: colours, the followed atom's glow, the speed chart's height scale, and atoms drawn 1.7× larger on phones. Not modelled: 3D, quantum effects, real gas sizes (~10²² atoms).
+
+Tests check: bit-exact reversal after 3000 steps, a failed reversal after a nudge, energy conservation within 1%, relaxation to Maxwell–Boltzmann (⟨v⁴⟩/⟨v²⟩² = 2 and ⟨v⟩ = √(πkT/2)), the free-expansion gain of ln 2 per atom, and equal final temperatures with ΔS = ln(T_f/√(T_hot T_cold)).
 
 ## Licensing
 

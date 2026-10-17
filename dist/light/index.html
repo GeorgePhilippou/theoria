@@ -32,6 +32,7 @@
     <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#7fe0f0"></i>B</span></div></div>
     <div class="scene-label landmark" id="label-glass"><div class="tag"><span class="name">Glass</span></div></div>
     <div class="scene-label landmark" id="label-focus"><div class="tag"><span class="name">Focus</span></div></div>
+    <div class="scene-label landmark" id="label-screen"><div class="tag"><span class="name">Screen</span></div></div>
   </div>
 
   <section class="readout glass" id="readout" aria-label="Measurements">
@@ -110,16 +111,19 @@
     <h3>Materials</h3>
     <p>Glass has permittivity n² (n is the refractive index), so light inside travels at c/n. The slit wall is a perfect conductor, where the electric field is held at zero.</p>
 
+    <h3>The screen</h3>
+    <p>Behind the two slits, a strip at the far edge shows the average brightness (the time-averaged E²) arriving along that line, and the curve above it plots the same thing: the classic interference pattern.</p>
+
     <h3>Measurements</h3>
     <p>“E / cB” compares the peak electric and magnetic fields at the middle of the arrow line over the last period. In a travelling light wave in air it is 1; inside glass it is 1/n.</p>
 
     <h3>Touch and keys</h3>
     <p>Drag to orbit, pinch or scroll to zoom, tap the surface to make a ripple, and hover to read the fields. Keys: Space pause, 1–4 experiments, T Surface/Top, R restart.</p>
 
-    <p class="honest">Drawn for clarity: colours (amber up, blue down) and the height scale, which adapts to the wave’s strength. With two slits, brightness colours are scaled to the region behind the wall and dimmed in front of it, where the light is far stronger. Because the model is 2D, it describes waves from a long line source, which fade as 1/√r rather than 1/r as in 3D, and it shows only one polarisation. The grid makes waves travel about 0.3% slower than c at the default wavelength (a known effect of the method).</p>
+    <p class="honest">Drawn for clarity: colours (amber up, blue down) and the height scale, which adapts to the wave’s strength. With two slits, heights and brightness colours are scaled to the region behind the wall, and the far stronger wave in front of it is drawn at a fraction of its size; the screen’s brightness is scaled to its own brightest point. Because the model is 2D, it describes waves from a long line source, which fade as 1/√r rather than 1/r as in 3D, and it shows only one polarisation. The grid makes waves travel about 0.3% slower than c at the default wavelength (a known effect of the method).</p>
 
     <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/II_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume II</a> · Taflove &amp; Hagness, <em>Computational Electrodynamics</em></p>
-    <span class="version">Theoria · Light as a wave 0.1 · 2D Maxwell FDTD</span>
+    <span class="version">Theoria · Light as a wave 0.2 · 2D Maxwell FDTD</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>

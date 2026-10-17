@@ -34,8 +34,8 @@ const stage = createStage({
   },
 });
 const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 6, maxDistance: 70, maxPolarAngle: Math.PI * .47});
-const group = {base: new THREE.Group(), props: new THREE.Group(), arrows: new THREE.Group()};
+Object.assign(controls, {minDistance: 6, maxDistance: 110, maxPolarAngle: Math.PI * .47});
+const group = {base: new THREE.Group(), props: new THREE.Group(), arrows: new THREE.Group(), source: new THREE.Group(), screen: new THREE.Group()};
 for (const g of Object.values(group)) scene.add(g);
 
 const cellToWorld = (i, j) => [(i + .5) * CELL - W / 2, (W / 2) - (j + .5) * CELL];
@@ -192,6 +192,75 @@ function buildProps() {
   }
 }
 
+// ---------------------------------------------------------------- the source: an antenna, or an emitter along the left edge
+const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, 1.5, 16), new THREE.MeshStandardMaterial({
+  color: 0x3a3220, emissive: 0xffc56b, emissiveIntensity: .6, metalness: .6, roughness: .3,
+}));
+antenna.position.set(...cellToWorld(N / 2, N / 2).flatMap((v, k) => k === 0 ? [v, .75] : [v]));
+group.source.add(antenna);
+const antennaGlow = stage.sprite(0xffd28a, 1.4, group.source);
+antennaGlow.position.set(antenna.position.x, 1.5, antenna.position.z);
+const emitter = stage.line({color: 0xffc56b, width: 3.2, additive: true, parent: group.source});
+function updateSource() {
+  const antennaOn = settings.experiment === 'antenna';
+  antenna.visible = antennaGlow.visible = antennaOn;
+  const swing = Math.abs(Math.sin(em.omegaFor(settings.lambda) * field.t));
+  antennaGlow.material.opacity = .35 + .65 * swing;
+  antennaGlow.scale.setScalar(1 + .8 * swing);
+  antenna.material.emissiveIntensity = .3 + .9 * swing;
+  if (antennaOn) { emitter.setVisible(false); return; }
+  const [x] = cellToWorld(BORDER + 6, 0), z0 = cellToWorld(0, BORDER + 2)[1], z1 = cellToWorld(0, N - BORDER - 3)[1];
+  emitter.setVisible(true);
+  emitter.material.opacity = .25 + .6 * swing;
+  emitter.set([x, .06, z0, x, .06, z1]);
+}
+
+// ---------------------------------------------------------------- the screen behind two slits: where the light lands
+const SCREEN = {i: N - BORDER, from: BORDER + 2, to: N - BORDER - 2, sample: N - BORDER - 6};
+const screenCount = SCREEN.to - SCREEN.from;
+const screenTexture = new THREE.DataTexture(new Uint8Array(screenCount * 4), 1, screenCount, THREE.RGBAFormat);
+screenTexture.colorSpace = THREE.SRGBColorSpace;
+screenTexture.magFilter = screenTexture.minFilter = THREE.LinearFilter;
+{
+  const length = screenCount * CELL, strip = new THREE.Mesh(new THREE.PlaneGeometry(.45, length), new THREE.MeshBasicMaterial({map: screenTexture}));
+  strip.rotation.x = -Math.PI / 2;
+  const [x] = cellToWorld(SCREEN.i, 0), z = (cellToWorld(0, SCREEN.from)[1] + cellToWorld(0, SCREEN.to - 1)[1]) / 2;
+  strip.position.set(x, .02, z);
+  group.screen.add(strip);
+}
+const profile = stage.line({color: 0xffe2b8, width: 1.8, opacity: .75, parent: group.screen});
+const screenLevels = new Float32Array(screenCount);
+let screenMax = 1e-9;
+const screenTop = new THREE.Vector3();
+function heatColor(u) {
+  const stops = [[.02, .02, .05], [.3, .12, .58], [.98, .46, .34], [1, .95, .82]], at = [0, .35, .72, 1];
+  let k = 0;
+  while (k < 2 && u > at[k + 1]) k++;
+  const f = Math.min(1, Math.max(0, (u - at[k]) / (at[k + 1] - at[k])));
+  return stops[k].map((a, c) => a + (stops[k + 1][c] - a) * f);
+}
+function updateScreen() {
+  group.screen.visible = settings.experiment === 'slits';
+  if (!group.screen.visible) return;
+  let peak = 0;
+  for (let n = 0; n < screenCount; n++) {
+    let sum = 0;
+    for (let di = -2; di <= 2; di++) sum += avgI[(SCREEN.from + n) * N + SCREEN.sample + di];
+    screenLevels[n] = sum / 5;
+    peak = Math.max(peak, screenLevels[n]);
+  }
+  screenMax += (Math.max(peak, 1e-12) - screenMax) * .05;
+  const data = screenTexture.image.data, [x] = cellToWorld(SCREEN.i, 0), flat = [];
+  for (let n = 0; n < screenCount; n++) {
+    const u = Math.min(1, screenLevels[n] / screenMax), [r, g, b] = heatColor(u);
+    data[n * 4] = r * 200; data[n * 4 + 1] = g * 200; data[n * 4 + 2] = b * 200; data[n * 4 + 3] = 255;
+    flat.push(x, .05 + u * 1.4 * heightOn, cellToWorld(0, SCREEN.from + n)[1]);
+  }
+  screenTexture.needsUpdate = true;
+  profile.set(flat);
+  screenTop.set(x, .3, cellToWorld(0, SCREEN.from + 4)[1]);
+}
+
 // ---------------------------------------------------------------- E and B arrows along one line
 const arrows = {
   e: stage.line({color: COLOR.e, width: 2.4, segments: true, parent: group.arrows}),
@@ -280,10 +349,11 @@ function writeTexture() {
   const data = texture.image.data;
   const dimBefore = settings.experiment === 'slits' ? WALL.i : -1;
   for (let k = 0; k < N * N; k++) {
-    const v = Math.tanh(field.ez[k] / scale);
+    // In front of the slit wall the light is far stronger; it is drawn at 35% so the fringes behind stay readable.
+    const v = Math.tanh(field.ez[k] / scale * (k % N < dimBefore ? .35 : 1));
     data[k * 4] = (v * .5 + .5) * 255;
     // In front of the slit wall the light is far brighter; dim it there so the fringes stay readable.
-    data[k * 4 + 1] = Math.tanh(avgI[k] / iScale * (k % N < dimBefore ? .12 : 1)) * 255;
+    data[k * 4 + 1] = Math.tanh(avgI[k] / iScale * (k % N < dimBefore ? .025 : 1)) * 255;
     data[k * 4 + 2] = field.metal[k] ? 255 : field.eps[k] > 1.01 ? 128 : 0;
     data[k * 4 + 3] = 255;
   }
@@ -330,6 +400,7 @@ function updateLabels() {
   const pin = (id, p, show) => positionLabel($(id), labelPoint.copy(p), camera, {show, avoid: rects});
   pin('label-e', arrowTips.e, layers.arrows);
   pin('label-b', arrowTips.b, layers.arrows);
+  pin('label-screen', screenTop, group.screen.visible);
   if (lens) {
     const [x, z] = cellToWorld(lens.x0, cy - lens.a - 4);
     pin('label-glass', labelPoint.set(x, .8, z), true);
@@ -389,8 +460,13 @@ const FRAMING = {
 };
 const offset = new THREE.Vector3(), target = new THREE.Vector3(0, 0, 0);
 let offsetTween = null;
+/** Pulls the camera back on narrow-aspect windows so the whole visible grid stays in view. */
+function fitted(v) {
+  const halfWidth = (N - 2 * BORDER) * CELL / 2 + .6, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : 1.7) / v.length()));
+}
 function setFraming(name, animate = true) {
-  const to = new THREE.Vector3(...FRAMING[name]());
+  const to = fitted(new THREE.Vector3(...FRAMING[name]()));
   if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
   else { offset.copy(to); offsetTween = null; }
 }
@@ -492,7 +568,7 @@ const story = createStory({
   },
 });
 
-offset.set(...FRAMING.surface());
+offset.copy(fitted(new THREE.Vector3(...FRAMING.surface())));
 camera.position.copy(target).add(offset);
 controls.target.copy(target);
 controls.update();
@@ -517,6 +593,8 @@ function frame(time) {
   group.props.scale.y = .25 + .75 * heightOn;
   writeTexture();
   if (layers.arrows) updateArrows();
+  updateSource();
+  updateScreen();
 
   controls.update();
   offset.copy(camera.position).sub(controls.target);
