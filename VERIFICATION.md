@@ -62,3 +62,12 @@
 - Fixed: the readout now spans the full width on phones (a desktop width rule was overriding the phone layout); special relativity's ship-speed label no longer runs into Layers on phones (γ is shown on wider screens only); the home page now scrolls the window rather than the body.
 - Added: a "Next concept" link at the end of each tour (in the order curved spacetime → special relativity → light → quantum → entropy, then round again); a favicon and share titles and descriptions on every page; subject names in place of version numbers on the home cards; a redrawn entropy card; a slightly wider readout on desktop; a closer hydrogen-atom camera on phones.
 - No console errors on any page. All 35 tests pass; physics is unchanged.
+
+# Curved spacetime 0.4: clarity pass (17 Oct 2026)
+
+- Every tour step was reviewed at 1440×900 and 375×812.
+- Clocks are now dials with a hand that turns once per unit of their own time, tilted towards the camera, with their own-time reading next to them in the scene.
+- The readout has bars of time lived (each clock's τ as a share of far-away time), and says how far A is behind B.
+- The redshift step names the sent and received colours and wavelengths (470 nm → 576 nm for A at 2.4 rₛ and B at 8 rₛ).
+- The light-ray and falling steps hide the innermost-stable-orbit ring, which concerns matter, not light.
+- Time view: a labelled far-away-time axis; the camera looks between the A–B line and C's path, so C's worldline stands beside the horizon tube rather than behind it; the horizon tube is labelled. Physics is unchanged, and all 35 tests pass.

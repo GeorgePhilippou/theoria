@@ -36,7 +36,8 @@ const stage = createStage({
 const {scene, camera, controls} = stage;
 Object.assign(controls, {minDistance: 4, maxDistance: 100, minPolarAngle: .08, maxPolarAngle: Math.PI * .49});
 const group = {};
-for (const name of ['base', 'time', ...Object.keys(layers)]) scene.add(group[name] = new THREE.Group());
+for (const name of ['base', 'time', 'isco', ...Object.keys(layers)]) scene.add(group[name] = new THREE.Group());
+let iscoOn = true;   // the innermost stable orbit is about matter, so the light-ray step hides it
 
 // In Space view a point sits on Flamm's surface; in Time view its height is coordinate time.
 const BOTTOM = -gr.embedding(R_MAX);
@@ -133,7 +134,7 @@ group.time.add(horizonTube);
 
 // Landmarks.
 sliceLine(ring(gr.PHOTON_SPHERE), {color: COLOR.photon, width: 2, opacity: .9, dashed: true, dash: [.22, .16], parent: group.landmarks}, .01);
-sliceLine(ring(gr.ISCO), {color: COLOR.isco, width: 1.6, opacity: .6, dashed: true, dash: [.3, .22], parent: group.landmarks}, .01);
+sliceLine(ring(gr.ISCO), {color: COLOR.isco, width: 1.6, opacity: .6, dashed: true, dash: [.3, .22], parent: group.isco}, .01);
 
 // ---------------------------------------------------------------- clocks
 // A small lit clock: a dark puck with a coloured rim and a bead that circles once per unit of its own time.
@@ -144,10 +145,18 @@ function makeClock(color, parent) {
   rim.rotation.x = Math.PI / 2;
   rim.position.y = .05;
   const bead = new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
-  body.add(puck, rim, bead);
+  // A clock hand from the centre to the bead, so each clock reads as a clock face.
+  const hand = new THREE.Group(), stick = new THREE.Mesh(new THREE.BoxGeometry(.25, .018, .035), new THREE.MeshBasicMaterial({color: 0xffffff}));
+  stick.position.x = .125;
+  hand.position.y = .06;
+  hand.add(stick);
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .03, 16), new THREE.MeshBasicMaterial({color}));
+  pin.position.y = .065;
+  body.add(puck, rim, bead, hand, pin);
+  body.scale.setScalar(1.8);
   parent.add(body);
   return {
-    body, bead,
+    body, bead, hand,
     glow: stage.sprite(color, 1.1, parent),
     worldline: stage.line({color, width: 3, parent}),
     ticks: tickMesh(color, parent),
@@ -171,6 +180,7 @@ function placeClock(clock, [x, y, z], tau, boost = 0) {
   clock.glow.position.set(x, y + .05, z);
   const a = -tau * Math.PI * 2;
   clock.bead.position.set(Math.cos(a) * .29, .06, Math.sin(a) * .29);
+  clock.hand.rotation.y = -a;
   const tick = Math.exp(-(tau % 1) * 5);
   clock.glow.material.opacity = Math.min(1, .35 + .3 * tick + boost);
   clock.glow.scale.setScalar(1.1 + 1.1 * boost);
@@ -317,6 +327,20 @@ function updateRays(now) {
   }
 }
 
+// ---------------------------------------------------------------- time axis (Time view)
+const AXIS_ANGLE = FALL_ANGLE - .42, AXIS_R = 6.2;   // to the right of C in Time view
+const timeAxis = stage.line({color: 0xb7c6d6, width: 1.4, opacity: .5, parent: group.time});
+const axisTicks = stage.line({color: 0xb7c6d6, width: 1.4, opacity: .5, segments: true, parent: group.time});
+function updateTimeAxis(now) {
+  const [x, z] = polar(AXIS_R, AXIS_ANGLE), [dx, dz] = polar(.35, AXIS_ANGLE);
+  timeAxis.set([x, timeY(0), z, x, timeY(Math.max(now, .01)), z]);
+  const flat = [];
+  for (let t = 10; t <= now; t += 10) flat.push(x, timeY(t), z, x + dx, timeY(t), z + dz);
+  axisTicks.set(flat);
+  timeAxis.material.opacity = axisTicks.material.opacity = .5 * blend;
+  group.time.visible = blend > .02;
+}
+
 // ---------------------------------------------------------------- labels, readout, markers
 const labelPoint = new THREE.Vector3();
 const pool = {};
@@ -340,10 +364,16 @@ function updateLabels() {
   pin($('label-a'), above(clockA), layers.clocks);
   pin($('label-b'), above(clockB), layers.clocks);
   pin($('label-c'), above(clockC), layers.falling);
+  $('label-a-tau').textContent = `${state.tauA.toFixed(1)} τ`;
+  $('label-b-tau').textContent = `${state.tauB.toFixed(1)} τ`;
+  $('label-c-tau').textContent = `${state.fall.tau.toFixed(1)} τ`;
   const front = Math.atan2(camera.position.z - anchor.z, camera.position.x - anchor.x);
-  pin($('label-horizon'), at(1.02, front, state.now, .02), blend < .5);
+  // In Space view the horizon label sits on the rim; in Time view, at the top of the horizon tube.
+  $('label-horizon-text').textContent = blend < .5 ? 'Event horizon · 1 rₛ' : 'Event horizon, through time';
+  const [hx, hz] = polar(1.02, front);
+  pin($('label-horizon'), blend < .5 ? at(1.02, front, state.now, .02) : [hx, timeY(state.now * .45), hz], blend < .5 || layers.falling);
   pin($('label-photon'), at(gr.PHOTON_SPHERE, front + Math.PI, state.now, .02), layers.landmarks && blend < .5);
-  pin($('label-isco'), at(gr.ISCO, front - Math.PI / 2, state.now, .02), layers.landmarks && blend < .5);
+  pin($('label-isco'), at(gr.ISCO, front - Math.PI / 2, state.now, .02), layers.landmarks && iscoOn && blend < .5);
 
   // Time view: own-time labels every 10 on the static clocks.
   let n = 0;
@@ -359,6 +389,21 @@ function updateLabels() {
     }
   }
   for (const el of (pool.tick ?? []).slice(n)) el.style.visibility = 'hidden';
+
+  // Time view: the far-away time axis.
+  let m = 0;
+  if (blend > .6) {
+    const [x, z] = polar(AXIS_R, AXIS_ANGLE);
+    for (let t = 10; t <= state.now; t += 10) {
+      const el = poolLabel('axis-tick', m++);
+      el.querySelector('.name').textContent = `t = ${t}`;
+      pin(el, [x, timeY(t), z]);
+    }
+    const el = poolLabel('axis-title', 0);
+    el.querySelector('.name').textContent = 'far-away time ↑';
+    pin(el, [x, timeY(state.now) + .9, z]);
+  } else if (pool['axis-title']) pool['axis-title'][0].style.visibility = 'hidden';
+  for (const el of (pool['axis-tick'] ?? []).slice(m)) el.style.visibility = 'hidden';
 }
 
 function updateReadout() {
@@ -371,10 +416,26 @@ function updateReadout() {
   $('b-where').textContent = `held at ${rB.toFixed(1)} rₛ`;
   $('a-tau').textContent = `${state.tauA.toFixed(2)} τ`;
   $('b-tau').textContent = `${state.tauB.toFixed(2)} τ`;
-  $('a-sub').textContent = `runs at ${(gr.rate(rA) * 100).toFixed(1)}% of the far-away rate`;
-  $('b-sub').textContent = layers.signals
-    ? `A’s flashes arrive every ${schedule.receivedInterval.toFixed(2)} τ, sent every ${FLASH_INTERVAL}`
-    : `runs at ${(gr.rate(rB) * 100).toFixed(1)}% of the far-away rate`;
+  const behind = state.tauB - state.tauA;
+  $('a-sub').textContent = `runs at ${(gr.rate(rA) * 100).toFixed(1)}% of the far-away rate${behind > .05 ? ` · ${Math.abs(behind).toFixed(2)} τ ${behind > 0 ? 'behind' : 'ahead of'} B` : ''}`;
+  if (layers.signals) {
+    const received = EMITTED_NM * gr.wavelengthFactor(rA, rB);
+    const key = `${received.toFixed(0)}|${schedule.receivedInterval.toFixed(2)}`;
+    if ($('b-sub').dataset.key !== key) {
+      $('b-sub').dataset.key = key;
+      const hex = nm => `#${spectrumColor(nm, colorScratch).getHexString()}`;
+      $('b-sub').innerHTML = `A’s flashes: sent every ${FLASH_INTERVAL} τ <i class="swatch" style="--c:${hex(EMITTED_NM)}"></i> ${EMITTED_NM} nm, arrive every ${schedule.receivedInterval.toFixed(2)} τ <i class="swatch" style="--c:${hex(received)}"></i> ${received.toFixed(0)} nm`;
+    }
+  } else {
+    delete $('b-sub').dataset.key;
+    $('b-sub').textContent = `runs at ${(gr.rate(rB) * 100).toFixed(1)}% of the far-away rate`;
+  }
+  // Bars: time lived by each clock, as a share of far-away time.
+  const share = (tau, rate) => state.now > .01 ? tau / state.now : rate;
+  $('bar-far').style.width = '100%';
+  $('bar-a').style.width = `${share(state.tauA, gr.rate(rA)) * 100}%`;
+  $('bar-b').style.width = `${share(state.tauB, gr.rate(rB)) * 100}%`;
+  $('bar-c').style.width = `${Math.min(1, share(state.fall.tau, 1)) * 100}%`;
   const r = state.fall.r;
   $('c-where').textContent = r < 1.001 ? 'at the horizon' : `falling · now ${r.toFixed(r < 1.1 ? 3 : 1)} rₛ`;
   $('c-tau').textContent = `${state.fall.tau.toFixed(2)} τ`;
@@ -475,12 +536,15 @@ function update(now) {
   state.tauB = updateStaticClock(clockB, settings.rB, now, boosts.boostB);
   state.fall = updateFallingClock(now);
   if (layers.light) updateRays(now);
+  updateTimeAxis(now);
 }
 
 // ---------------------------------------------------------------- camera
 // The camera orbits an anchor; each framing sets the anchor and the offset from it.
 // Phones look along A and B's radial line from the far side, so A and B stack upward on a portrait screen.
 const PHONE_AZ = STATIC_ANGLE + Math.PI, PHONE_CENTRE = polar(3, STATIC_ANGLE);
+// Time view looks along the line halfway between A and B's direction and C's, so both worldlines stand in front of the horizon.
+const TIME_AZ = (STATIC_ANGLE + FALL_ANGLE) / 2;
 const offsetAt = (az, d, h) => [d * Math.cos(az), h, d * Math.sin(az)];
 const FRAMING = {
   wide: () => narrow()
@@ -491,8 +555,8 @@ const FRAMING = {
     : {anchor: [0, -5.6, 0], offset: offsetAt(.99, 16.1, 8.2)},
   follow: () => ({anchor: null, offset: narrow() ? offsetAt(FALL_ANGLE + Math.PI + .6, 13, 9) : offsetAt(FALL_ANGLE + Math.PI + .9, 9.5, 5.5)}),
   time: () => narrow()
-    ? {anchor: [0, 2.6, 0], offset: offsetAt(PHONE_AZ - 1.1, 40, 9.5)}
-    : {anchor: [0, 2.6, 0], offset: offsetAt(.965, 31.6, 4)},
+    ? {anchor: [0, .6, 0], offset: offsetAt(TIME_AZ, 50, 9)}
+    : {anchor: [0, 2.6, 0], offset: offsetAt(TIME_AZ, 31.6, 4)},
 };
 let framing = 'wide', spaceFraming = 'wide', offsetTween = null;
 const anchor = new THREE.Vector3(), anchorGoal = new THREE.Vector3(), offset = new THREE.Vector3();
@@ -515,6 +579,7 @@ controls.addEventListener('start', () => { offsetTween = null; });
 function applyLayers(next) {
   if (next) for (const key of Object.keys(layers)) layers[key] = !!next[key];
   for (const [key, on] of Object.entries(layers)) group[key].visible = on;
+  group.isco.visible = layers.landmarks && iscoOn;
   for (const chip of document.querySelectorAll('.chip')) setPressed(chip, layers[chip.dataset.layer]);
   version++;
 }
@@ -586,6 +651,7 @@ const story = createStory({
   steps,
   onEnter(step, index) {
     spaceFraming = step.camera ?? 'wide';
+    iscoOn = step.isco ?? true;
     setView(step.view === 'time');
     applyLayers(step.layers);
     showPanel(index === steps.length - 1 && !narrow());
@@ -610,6 +676,7 @@ new ResizeObserver(() => {
   stage.resize();
 }).observe($('transport'));
 
+const UP = new THREE.Vector3(0, 1, 0), faceDir = new THREE.Vector3(), faceQuat = new THREE.Quaternion(), IDENTITY = new THREE.Quaternion();
 let lastFrame = performance.now();
 function frame(time) {
   requestAnimationFrame(frame);
@@ -631,6 +698,13 @@ function frame(time) {
     if (offsetTween.u === 1) offsetTween = null;
   }
   anchor.lerp(computeAnchorGoal(), reducedMotion ? 1 : Math.min(1, dt * 4));
+  // Tilt each clock face most of the way towards the camera, so it reads as a dial.
+  for (const clock of [clockA, clockB, clockC]) {
+    faceDir.copy(camera.position).sub(clock.body.position).normalize();
+    faceQuat.setFromUnitVectors(UP, faceDir);
+    clock.body.quaternion.copy(IDENTITY).slerp(faceQuat, .7);
+    clock.body.scale.setScalar(1.8 - .9 * blend);   // smaller in Time view, where the worldlines matter
+  }
   controls.target.copy(anchor);
   camera.position.copy(anchor).add(offset);
   stage.setFogFor(offset.length());
@@ -640,3 +714,12 @@ function frame(time) {
   stage.render();
 }
 requestAnimationFrame(frame);
+
+// With ?debug in the URL, expose hooks for checks: jump to a time and finish camera moves at once.
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__gr = {
+    settings, story,
+    at(t) { const s = $('scrub'); s.value = t; s.dispatchEvent(new Event('input')); },
+    snap() { if (offsetTween) offsetTween.u = .999; blend = targetBlend; anchor.copy(computeAnchorGoal()); },
+  };
+}

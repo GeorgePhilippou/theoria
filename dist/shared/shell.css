@@ -406,3 +406,12 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 .next-concept small { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); }
 .next-concept:hover { border-color: rgba(169, 223, 238, .5); background: rgba(255, 255, 255, .04); }
 .next-concept .arrow { color: var(--accent); font-size: 16px; }
+
+/* Thin bars under readout rows, e.g. time lived by each clock */
+.readout-row .bar { grid-column: 2 / 4; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .07); margin-top: 7px; overflow: hidden; }
+.readout-row .bar i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 2px; box-shadow: 0 0 8px var(--c); transition: width .15s linear; }
+.readout-row .sub .swatch { width: 8px; height: 8px; vertical-align: -1px; }
+.v2 .scene-label.axis-tick .name, .v2 .scene-label.axis-title .name { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.v2 .scene-label.axis-tick .tag { transform: translate(10px, -50%); }
+.v2 .scene-label.axis-title .tag { transform: translate(-50%, -100%); }
+@media (max-width: 720px) { .readout-row .bar { display: none; } }

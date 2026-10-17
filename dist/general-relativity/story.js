@@ -7,7 +7,7 @@ export const steps = [
     title: 'Gravity slows time.',
     body: `<p>Two clocks hover above a black hole. Clock ${sw(SWATCH.a)} A is held close in; clock ${sw(SWATCH.b)} B is further out.</p>
       <p>Each one ticks perfectly normally to anyone beside it. But put their readings side by side and <b>the lower clock has lived through less time</b>.</p>`,
-    notice: 'The two counters drift apart, and keep drifting.',
+    notice: 'The hands turn at different speeds, and the bars in the readout show how much time each clock has lived.',
     maths: 'dτ/dt = √(1 − rₛ/r)',
     view: 'space', layers: {clocks: true},
   },
@@ -25,7 +25,7 @@ export const steps = [
       <p>Aim inside a sharp threshold and the light is <b>captured</b> ${sw(SWATCH.capture)}. Just outside it, light can <b>circle the photon sphere</b> ${sw(SWATCH.photon)} before escaping.</p>`,
     notice: 'The violet ray loops around the dashed photon sphere before it escapes.',
     maths: 'capture if impact parameter b < 3√3/2 · rₛ ≈ 2.6 rₛ',
-    view: 'space', camera: 'close', layers: {light: true, landmarks: true},
+    view: 'space', camera: 'close', isco: false, layers: {light: true, landmarks: true},
   },
   {
     title: 'Falling in.',
@@ -33,13 +33,13 @@ export const steps = [
       <p>Measured by distant time, it slows and <b>freezes just above the horizon</b>, its clock creeping towards a value it never quite shows.</p>`,
     notice: 'C’s counter stalls, while far-away time keeps running.',
     maths: 'proper time to the horizon is finite; coordinate time t → ∞',
-    view: 'space', camera: 'follow', layers: {falling: true, landmarks: true},
+    view: 'space', camera: 'follow', isco: false, layers: {falling: true, landmarks: true},
   },
   {
     title: 'Time as a direction.',
     body: `<p>Now time runs upward. Each clock traces a <b>worldline</b>, and each tick mark is one unit of that clock’s own time.</p>
       <p>Lower clocks’ ticks are spaced further apart. Every flash’s path has the same shape, so flashes arrive as far apart as they left, but more of B’s faster ticks fit between them. C’s worldline turns vertical at the horizon.</p>`,
-    notice: 'Drag to look along the time axis. The flat sheet is the moment shown on the timeline.',
+    notice: 'The time axis on the right counts far-away time. The flat sheet at the top is the moment shown on the timeline.',
     maths: 'height = coordinate time t',
     view: 'time', camera: 'time', layers: {clocks: true, signals: true, falling: true},
   },

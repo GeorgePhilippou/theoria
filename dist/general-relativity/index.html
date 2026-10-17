@@ -33,10 +33,10 @@
   <section class="story glass" id="story" aria-live="polite"></section>
 
   <div class="labels" aria-hidden="true">
-    <div class="scene-label" id="label-a"><div class="tag"><span class="name"><i class="swatch" style="--c:#f0bd86"></i>A</span></div></div>
-    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#9fe3ef"></i>B</span></div></div>
-    <div class="scene-label" id="label-c"><div class="tag"><span class="name"><i class="swatch" style="--c:#f4a3c8"></i>C</span></div></div>
-    <div class="scene-label landmark" id="label-horizon"><div class="tag"><span class="name">Event horizon · 1 rₛ</span></div></div>
+    <div class="scene-label" id="label-a"><div class="tag"><span class="name"><i class="swatch" style="--c:#f0bd86"></i>A</span><span class="detail" id="label-a-tau"></span></div></div>
+    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#9fe3ef"></i>B</span><span class="detail" id="label-b-tau"></span></div></div>
+    <div class="scene-label" id="label-c"><div class="tag"><span class="name"><i class="swatch" style="--c:#f4a3c8"></i>C</span><span class="detail" id="label-c-tau"></span></div></div>
+    <div class="scene-label landmark" id="label-horizon"><div class="tag"><span class="name" id="label-horizon-text">Event horizon · 1 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-photon"><div class="tag"><span class="name">Photon sphere · 1.5 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-isco"><div class="tag"><span class="name">Innermost stable orbit · 3 rₛ</span></div></div>
     <div id="dynamic-labels"></div>
@@ -47,24 +47,28 @@
       <i class="swatch" style="--c:#d8e2ea"></i>
       <span class="who">Far-away clock<small>the reference</small></span>
       <strong id="far-tau"></strong>
+      <span class="bar"><i id="bar-far" style="--c:#d8e2ea"></i></span>
     </div>
     <div class="readout-row" id="row-a">
       <i class="swatch" style="--c:#f0bd86"></i>
       <span class="who">Clock A<small id="a-where"></small></span>
       <strong id="a-tau"></strong>
       <span class="sub" id="a-sub"></span>
+      <span class="bar"><i id="bar-a" style="--c:#f0bd86"></i></span>
     </div>
     <div class="readout-row" id="row-b">
       <i class="swatch" style="--c:#9fe3ef"></i>
       <span class="who">Clock B<small id="b-where"></small></span>
       <strong id="b-tau"></strong>
       <span class="sub" id="b-sub"></span>
+      <span class="bar"><i id="bar-b" style="--c:#9fe3ef"></i></span>
     </div>
     <div class="readout-row" id="row-c">
       <i class="swatch" style="--c:#f4a3c8"></i>
       <span class="who">Clock C<small id="c-where"></small></span>
       <strong id="c-tau"></strong>
       <span class="sub" id="c-sub"></span>
+      <span class="bar"><i id="bar-c" style="--c:#f4a3c8"></i></span>
     </div>
   </section>
 
@@ -146,10 +150,10 @@
     <h3>Touch and keys</h3>
     <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash to see when and where it happened. Keys: Space play/pause, ← → step, T Space/Time, R replay.</p>
 
-    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each bead circles once per unit of that clock’s own time), the black sphere marking the horizon, glows, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
+    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each hand turns once per unit of that clock’s own time), the black sphere marking the horizon, glows, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
 
     <p>Further reading: <a href="https://jila.colorado.edu/~ajsh/astr3740_17/grbook.pdf" target="_blank" rel="noopener">Hamilton · General Relativity, Black Holes and Cosmology</a> · <a href="https://www.einstein-online.info/en/spacetime/" target="_blank" rel="noopener">Einstein Online · Spacetime</a></p>
-    <span class="version">Theoria · General relativity 0.3 · Schwarzschild exterior</span>
+    <span class="version">Theoria · General relativity 0.4 · Schwarzschild exterior</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>
