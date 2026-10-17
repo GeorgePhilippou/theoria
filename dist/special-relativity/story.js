@@ -7,7 +7,7 @@ export const steps = [
     title: 'A clock made of light.',
     body: `<p>A ship ${sw(SWATCH.ship)} carries the simplest possible clock: a pulse of light ${sw(SWATCH.photon)} bouncing between two mirrors. Each round trip is one tick.</p>
       <p>Seen from Earth ${sw(SWATCH.earth)}, the ship moves, so the light runs along a <b>longer, slanted path</b>. Light’s speed is the same for everyone, so each tick must take longer.</p>`,
-    notice: 'The zig-zag trail, and the ship’s clock falling behind Earth’s.',
+    notice: 'The zig-zag trail, and the ship’s clock falling behind Earth’s: the readout says by how much.',
     maths: 'Δt = γ Δτ,  γ = 1 / √(1 − v²/c²)',
     frame: 'earth', trip: 'cruise', view: 'space', camera: 'follow', layers: {clock: true},
   },
@@ -15,7 +15,7 @@ export const steps = [
     title: 'Time as a direction.',
     body: `<p>Now time runs upward and each object draws a <b>worldline</b>. Ticks mark each clock’s own seconds; the ship’s are stretched out.</p>
       <p>Light always travels at 45°, along the <b>light cone</b>. The curved lines are the same in every frame: ticks of equal own-time from Earth and ship land on the same curve.</p>`,
-    notice: 'Tick 8 of the ship and tick 8 of Earth sit on the same hyperbola.',
+    notice: 'The two glowing ticks: the ship’s 8th and Earth’s 8th second sit on the same curve.',
     maths: 'τ² = t² − x²/c²  is the same for every observer',
     frame: 'earth', trip: 'cruise', view: 'time', layers: {clock: true, invariants: true},
   },
@@ -23,7 +23,7 @@ export const steps = [
     title: 'Simultaneous for whom?',
     body: `<p>A flash ${sw(SWATCH.flash)} goes off in the middle of the ship. For the crew it reaches the back and the front together.</p>
       <p>From Earth, the back is rushing towards the light and the front is running away from it, so <b>the back is lit first</b>. Both views are right: “at the same time” depends on who is asking.</p>`,
-    notice: 'The readout shows when each end is lit, in this frame.',
+    notice: 'The lamps at the ship’s ends: the back lights up first. The ring of light stays centred where the flash went off.',
     maths: 'Earth: Δt = γ v L₀ / c²   Ship: Δt′ = 0',
     frame: 'earth', trip: 'cruise', view: 'space', camera: 'follow', layers: {flash: true},
   },
@@ -38,8 +38,8 @@ export const steps = [
   {
     title: 'Moving things are shorter.',
     body: `<p>To measure a moving ship, you mark where its front and back are <b>at the same moment</b>. But moments differ between frames.</p>
-      <p>Cut the ship’s worldline band along Earth’s “now” and it is shorter than along its own “now”. Nothing is squeezed; the two cuts simply measure different things.</p>`,
-    notice: 'Compare the length in the readout as you switch “Seen from”.',
+      <p>The ship’s front and back draw a <b>band</b> through spacetime. Cut it along Earth’s “now” ${sw(SWATCH.earth)} and the cut is shorter than along the ship’s own “now” ${sw(SWATCH.ship)}. Nothing is squeezed; the two cuts measure different things.</p>`,
+    notice: 'The two bright cuts across the band, 3.20 against 4.00 light-seconds at 0.6 c.',
     maths: 'L = L₀ / γ',
     frame: 'earth', trip: 'cruise', view: 'time', layers: {simultaneity: true},
   },

@@ -10,8 +10,8 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 
 | Concept | Folder | Status |
 |---|---|---|
-| General relativity · curved spacetime | `dist/general-relativity/` | v0.3 |
-| Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
+| General relativity · curved spacetime | `dist/general-relativity/` | v0.4 |
+| Special relativity · moving clocks | `dist/special-relativity/` | v0.3 |
 | Light as a wave · electromagnetism | `dist/light/` | v0.2 |
 | Quantum waves · quantum mechanics | `dist/quantum/` | v0.2 |
 | Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.1 |

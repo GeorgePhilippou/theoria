@@ -23,7 +23,7 @@ const narrow = () => innerWidth <= 720;
 let blend = 0, targetBlend = 0;    // 0 = Space view, 1 = Time view
 let phi = 0, targetPhi = 0;        // rapidity of the frame we are viewing from
 let frameName = 'earth', spaceFraming = 'overview';
-let trip, centreEvents, centreTaus, photonEvents, flash, candidates = [];
+let trip, centreEvents, centreTaus, photonEvents, flash, backEvents, frontEvents, candidates = [];
 const earthEvents = [[0, 0, 0], [400, 0, 0]];
 
 // ---------------------------------------------------------------- stage
@@ -90,7 +90,8 @@ const nullLines = stage.line({color: COLOR.cone, width: 1.6, opacity: .55, dashe
 const hyperbolae = [4, 8, 12, 16, 20].map(s => {
   const pts = [];
   for (let x = -40; x <= 40; x += .2) { const t = Math.hypot(s, x); if (t <= T_MAX + 2) pts.push(x, t, 0); }
-  return stage.line({color: COLOR.cone, width: s % 8 === 0 ? 1.8 : 1.2, opacity: s % 8 === 0 ? .6 : .32, parent: group.invariants}).set(pts);
+  // τ = 8 s is drawn brightest: the tour compares the clocks' 8th ticks on it.
+  return stage.line({color: s === 8 ? 0xffffff : COLOR.cone, width: s === 8 ? 2.6 : s % 8 === 0 ? 1.8 : 1.2, opacity: s === 8 ? .85 : s % 8 === 0 ? .6 : .32, parent: group.invariants}).set(pts);
 });
 
 // ---------------------------------------------------------------- Earth
@@ -195,7 +196,7 @@ const worldline = {
   shipFuture: stage.line({color: COLOR.ship, width: 1.4, opacity: .3, dashed: true, dash: [.4, .35], parent: group.time}),
 };
 function tickMesh(color) {
-  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.075, 16, 8), new THREE.MeshBasicMaterial({color, transparent: true}), 64);
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.11, 16, 8), new THREE.MeshBasicMaterial({color, transparent: true}), 64);
   mesh.count = 0;
   mesh.frustumCulled = false;
   group.time.add(mesh);
@@ -235,6 +236,22 @@ function sheet(color) {
 }
 const sheets = {earth: sheet(COLOR.earth), ship: sheet(COLOR.ship)};
 
+// The ship's band in spacetime (its back and front worldlines), and the two ways of cutting it:
+// along Earth's "now" and along the ship's own "now". Their lengths are what each frame calls the ship's length.
+const band = {
+  back: stage.line({color: COLOR.ship, width: 1.4, opacity: .55, parent: group.simultaneity}),
+  front: stage.line({color: COLOR.ship, width: 1.4, opacity: .55, parent: group.simultaneity}),
+  cutEarth: stage.line({color: COLOR.earth, width: 4.5, parent: group.simultaneity}),
+  cutShip: stage.line({color: COLOR.ship, width: 4.5, parent: group.simultaneity}),
+};
+const cutLabelAt = {earth: new THREE.Vector3(), ship: new THREE.Vector3()};
+
+// Lamps at the ship's two ends that light when the flash reaches them, and stay lit.
+const lamps = {back: stage.sprite(COLOR.flash, 1, group.flash), front: stage.sprite(COLOR.flash, 1, group.flash)};
+
+// Tick 8 of each clock, highlighted on the τ = 8 s curve they share.
+const eight = {earth: stage.sprite(0xffffff, 1.7, group.invariants), ship: stage.sprite(0xffffff, 1.7, group.invariants)};
+
 // ---------------------------------------------------------------- physics
 function rebuild() {
   trip = sr.journey({v: settings.v, roundTrip: settings.roundTrip, turnAt: TURN_AT});
@@ -242,6 +259,8 @@ function rebuild() {
   centreEvents = centreTaus.map(tau => trip.centreAt(tau));
   photonEvents = sr.lightClock(trip, {L: CLOCK_L, tauMax: 40});
   flash = sr.shipFlash(trip, {L0, tauEmit: FLASH_TAU});
+  backEvents = centreTaus.map(tau => sr.shipEvent(trip, tau, [0, -L0 / 2]));
+  frontEvents = centreTaus.map(tau => sr.shipEvent(trip, tau, [0, L0 / 2]));
   candidates = [
     ...Array.from({length: 40}, (_, n) => ({e: [n + 1, 0, 0], kind: 'earth', title: `Earth’s clock reads ${n + 1} s`})),
     ...Array.from({length: 40}, (_, n) => ({e: trip.centreAt(n + 1), kind: 'ship', title: `Ship’s clock reads ${n + 1} s`})),
@@ -377,6 +396,16 @@ function update(now) {
     pop(flashView.emit, fe, 1.2);
     pop(flashView.back, fb, 1.4);
     pop(flashView.front, ff, 1.4);
+    // Lamps ride on the ship's ends (Space view): dim until the light arrives, then lit.
+    for (const [lamp, events, hit] of [[lamps.back, backEvents, fb], [lamps.front, frontEvents, ff]]) {
+      const end = sr.sliceAt(events, phi, now), lit = now >= hit[0];
+      lamp.visible = !!end && blend < .5;
+      if (end) lamp.position.set(...toWorld(now, end[1], 0, DECK + .15));
+      lamp.material.color.set(lit ? 0xffffff : COLOR.flash);
+      lamp.material.opacity = lit ? 1 : .25;
+      lamp.scale.setScalar(lit ? 1.1 : .7);
+    }
+    state.lit = {back: now >= fb[0], front: now >= ff[0]};
     const rays = [];
     for (const target of [flash.back, flash.front]) {
       const past = pastOf([flash.emit, target], now);
@@ -404,6 +433,30 @@ function update(now) {
       s.edge.material.opacity = .9 * blend;
       s.mesh.visible = blend > .02;
     }
+    band.back.set(flatWorld(pastOf(backEvents, now), .01));
+    band.front.set(flatWorld(pastOf(frontEvents, now), .01));
+    // Earth's cut: where the two ends are at one Earth time. The ship's cut: one moment of ship time.
+    const earthCut = [sr.sliceAt(backEvents, 0, earthTau), sr.sliceAt(frontEvents, 0, earthTau)];
+    const shipCut = [sr.shipEvent(trip, shipTau, [0, -L0 / 2]), sr.shipEvent(trip, shipTau, [0, L0 / 2])];
+    const segment = (line, ends, key, lift) => {
+      if (!ends[0] || !ends[1]) { line.set([]); return; }
+      const a = display(ends[0].slice(0, 3)), b = display(ends[1].slice(0, 3));
+      line.set([...toWorld(a[0], a[1], 0, lift), ...toWorld(b[0], b[1], 0, lift)]);
+      cutLabelAt[key].set(...toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0, lift));
+    };
+    segment(band.cutEarth, earthCut, 'earth', .06);
+    segment(band.cutShip, shipCut, 'ship', .1);
+    state.cuts = {earth: earthCut[0] && earthCut[1] ? Math.abs(earthCut[1][1] - earthCut[0][1]) : null, ship: L0};
+    // The band and its cuts belong to the one-way cruise; the round trip has its own story.
+    for (const line of Object.values(band)) line.material.opacity = settings.roundTrip ? 0 : (line === band.back || line === band.front ? .55 : 1) * blend;
+  }
+
+  // Tick 8 of each clock: both lie on the τ = 8 s curve, whatever the frame.
+  for (const [sprite, event] of [[eight.earth, [8, 0, 0]], [eight.ship, trip.centreAt(8)]]) {
+    const d = display(event);
+    sprite.visible = blend > .5 && d[0] <= now;
+    sprite.position.set(...toWorld(d[0], d[1], 0));
+    sprite.material.opacity = blend;
   }
 
   // Floor rides with "now" in Time view; time furniture fades in with Time view.
@@ -427,9 +480,17 @@ function updateReadout() {
   $('ship-tau').textContent = `${fmt(shipTau)} s`;
   $('earth-where').textContent = Math.abs(earthU) < 1e-4 ? 'at rest in this frame' : `moving at ${fmt(Math.abs(earthU))} c · ticks ${fmt(sr.gamma(earthU))}× slower`;
   $('ship-where').textContent = Math.abs(u) < 1e-4 ? 'at rest in this frame' : `moving at ${fmt(Math.abs(u))} c · ticks ${fmt(sr.gamma(u))}× slower`;
-  $('ship-sub').textContent = state.home
+  const lag = earthTau - shipTau;
+  const lagText = who => `${fmt(Math.abs(lag))} s behind ${who}, in this frame`;
+  $('earth-sub').textContent = lag < -.005 ? lagText('the ship’s clock') : '';
+  $('earth-sub').hidden = !(lag < -.005);
+  $('ship-sub').innerHTML = state.home
     ? `home again: the trip took ${trip.legs[2].tau0.toFixed(1)} s of ship time and ${(2 * TURN_AT).toFixed(1)} s of Earth time`
-    : `length here ${fmt(sr.contractedLength(L0, u))} ls (${L0.toFixed(2)} at rest)`;
+    : `${lag > .005 ? `${lagText('Earth’s clock')}<br>` : ''}length here ${fmt(sr.contractedLength(L0, u))} ls (${L0.toFixed(2)} at rest)`;
+  // Bars: time each clock has lived, as a share of this frame's time.
+  const share = tau => now > .01 ? Math.min(1, tau / now) : 1;
+  $('bar-earth').style.width = `${share(earthTau) * 100}%`;
+  $('bar-ship').style.width = `${share(shipTau) * 100}%`;
   $('row-flash').hidden = !layers.flash;
   if (layers.flash) {
     const gap = state.ff[0] - state.fb[0];
@@ -469,8 +530,23 @@ function hidePool(kind, from) { for (const el of (pool[kind] ?? []).slice(from))
 function updateLabels() {
   const rects = [$('story'), $('panel'), $('readout'), $('transport')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
   const pin = (el, x, y, z, show = true) => positionLabel(el, labelPoint.set(x, y, z), camera, {show, avoid: rects});
-  pin($('label-earth'), state.ex + EARTH_R, state.now * blend + EARTH_R * 2.2, 0);
-  pin($('label-ship'), state.cx, state.now * blend + DECK + .5, .55);
+  const cutsOn = layers.simultaneity && blend > .6 && state.cuts && !settings.roundTrip;
+  // On phones the cut labels need the room, so the name labels step aside while they show.
+  const names = !(cutsOn && narrow());
+  pin($('label-earth'), state.ex + EARTH_R, state.now * blend + EARTH_R * 2.2, 0, names);
+  // When Earth and ship meet (the end of a round trip), drop the ship's label below Earth's.
+  const together = Math.abs(state.ex - state.cx) < 1.5;
+  pin($('label-ship'), state.cx, state.now * blend + (together ? -.9 : DECK + .5), .55, names);
+  $('label-cut-earth-text').textContent = state.cuts?.earth ? `Earth’s cut ${fmt(state.cuts.earth)} ls` : '';
+  $('label-cut-ship-text').textContent = `Ship’s cut ${fmt(L0)} ls`;
+  // Earth's cut is labelled below its segment, the ship's above, so the two never collide.
+  positionLabel($('label-cut-earth'), labelPoint.copy(cutLabelAt.earth).setY(cutLabelAt.earth.y - 1.1), camera, {show: cutsOn && !!state.cuts?.earth, avoid: rects});
+  positionLabel($('label-cut-ship'), labelPoint.copy(cutLabelAt.ship).setY(cutLabelAt.ship.y + 1.5), camera, {show: cutsOn, avoid: rects});
+  const lampsOn = layers.flash && blend < .5 && state.lit;
+  $('label-back-text').textContent = state.lit?.back ? 'Back · lit' : 'Back · not yet';
+  $('label-front-text').textContent = state.lit?.front ? 'Front · lit' : 'Front · not yet';
+  positionLabel($('label-back'), labelPoint.copy(lamps.back.position).setY(lamps.back.position.y + .7), camera, {show: lampsOn, avoid: rects});
+  positionLabel($('label-front'), labelPoint.copy(lamps.front.position).setY(lamps.front.position.y + .7), camera, {show: lampsOn, avoid: rects});
   pin($('label-cone'), -10, 10, 0, layers.invariants && blend > .6);
 
   // Time view: tick numbers every 4 s, times on the axis, and the invariant curves.
@@ -487,16 +563,19 @@ function updateLabels() {
     }
   }
   hidePool('tick', n);
-  const axisX = anchor.x - (narrow() ? 7 : 13);
+  // The time axis sits just left of the leftmost worldline, clear of the tour card.
+  const axisX = Math.min(state.ex, state.cx) - (narrow() ? 3 : 4.5);
   for (let i = 0; i < 5; i++) {
     const el = poolLabel('axis', i);
     el.querySelector('.name').textContent = `${(i + 1) * 5} s`;
     pin(el, axisX, (i + 1) * 5, -3, blend > .6);
   }
+  // Curve labels on the left branch, away from the clocks' own tick labels.
   [4, 8, 12, 16, 20].forEach((s, i) => {
-    const el = poolLabel('curve', i);
-    el.querySelector('.name').textContent = `τ = ${s} s`;
-    pin(el, 0, s, 0, layers.invariants && blend > .6 && s % 8 === 0);
+    // On the right branch, between the ship's worldline and the light cone.
+    const el = poolLabel('curve', i), xl = s * 1.1;
+    el.querySelector('.name').textContent = s === 8 ? 'τ = 8 s: tick 8 of both clocks' : `τ = ${s} s`;
+    pin(el, xl, Math.hypot(s, xl), 0, layers.invariants && blend > .6 && s % 8 === 0);
   });
 }
 
@@ -693,3 +772,12 @@ function frame(time) {
   stage.render();
 }
 requestAnimationFrame(frame);
+
+// With ?debug in the URL, expose hooks for checks: jump to a time and finish camera and frame moves at once.
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__sr = {
+    settings, story,
+    at(t) { const s = $('scrub'); s.value = t; s.dispatchEvent(new Event('input')); },
+    snap() { if (offsetTween) offsetTween.u = .999; blend = targetBlend; phi = targetPhi; update(transport.t); anchor.copy(computeAnchorGoal()); },
+  };
+}

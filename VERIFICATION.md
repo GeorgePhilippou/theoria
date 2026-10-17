@@ -71,3 +71,12 @@
 - The redshift step names the sent and received colours and wavelengths (470 nm → 576 nm for A at 2.4 rₛ and B at 8 rₛ).
 - The light-ray and falling steps hide the innermost-stable-orbit ring, which concerns matter, not light.
 - Time view: a labelled far-away-time axis; the camera looks between the A–B line and C's path, so C's worldline stands beside the horizon tube rather than behind it; the horizon tube is labelled. Physics is unchanged, and all 35 tests pass.
+
+# Special relativity 0.3: clarity pass (17 Oct 2026)
+
+- Every tour step was reviewed at 1440×900 and 375×812.
+- Readout: bars of time lived (each clock's reading as a share of this frame's time), and a plain statement of which clock is behind and by how much, in this frame (1.60 s at t = 8 s, 0.6 c).
+- Time view: the τ = 8 s curve is drawn brightest, and tick 8 of Earth and of the ship are highlighted on it; curve labels moved to the right branch; larger tick dots; the time axis now sits beside the worldlines instead of behind the tour card.
+- Simultaneity: lamps at the ship's back and front light when the flash reaches them and stay lit ("Back · lit", "Front · not yet").
+- Length: the ship's front and back worldlines are drawn as a band, with the two cuts marked: Earth's "now" gives 3.20 ls and the ship's "now" 4.00 ls at 0.6 c. Hidden on the round trip.
+- Twin paradox: Earth and Ship labels no longer collide at the reunion. Physics is unchanged, and all 35 tests pass. No console errors.
