@@ -88,3 +88,58 @@ test('a falling clock reaches the horizon in finite proper time but never in coo
   assert.ok(fall.tau(fall.etaAtT(60)) < fall.tauHorizon, 'its clock never quite reaches τ_h in finite t');
   close(fall.tau(fall.etaAtT(60)), fall.tauHorizon, 1e-3, 'but approaches it');
 });
+
+test('Eddington–Finkelstein time agrees with t + ln(r − 1) outside, and stays finite through the horizon', () => {
+  const R = 6, ef = gr.fallEF(R), fall = gr.freeFall(R);
+  for (const eta of [.3, .8, 1.5, fall.etaHorizon - .05]) {
+    const expected = gr.efTime(fall.t(eta), fall.r(eta)), got = ef.atTau(fall.tau(eta)).ef;
+    assert.ok(Math.abs(got - expected) < 2e-3 * Math.max(1, Math.abs(expected)), `η = ${eta}: ${got} vs ${expected}`);
+  }
+  assert.ok(Number.isFinite(ef.efHorizon), 'finite EF time at the horizon');
+  assert.ok(ef.samples.at(-1).r < .1, 'the fall continues inside, towards the centre');
+  // Inside, EF time keeps increasing along the fall: the clock's future is always inwards.
+  for (let i = 1; i < ef.samples.length; i++) assert.ok(ef.samples[i].ef > ef.samples[i - 1].ef);
+});
+
+test('light cones tip over: outgoing light is vertical at the horizon and points inwards inside it', () => {
+  assert.equal(gr.coneSlopes(3)[0], -1);
+  assert.ok(Math.abs(gr.coneSlopes(3)[1] - 2) < 1e-12);
+  assert.ok(gr.coneSlopes(1 + 1e-9)[1] > 1e8, 'vertical at the horizon');
+  assert.ok(gr.coneSlopes(.5)[1] < 0, 'inside, "outgoing" light also moves to smaller r');
+  // Outgoing light between static radii agrees with the tortoise-coordinate delay.
+  const r0 = 2.4, r1 = 8, ef1 = gr.outgoingLightEF(r0, 0, r1);
+  const t1 = ef1 - Math.log(r1 - 1) + Math.log(r0 - 1);
+  assert.ok(Math.abs(t1 - gr.radialLightDelay(r0, r1)) < 1e-12);
+});
+
+test('orbits: circular orbits hold, nearly circular ones precess as predicted, and close ones plunge', () => {
+  const r = 8, circ = gr.orbit(r, gr.circularL(r), {tMax: 600});
+  assert.equal(circ.outcome, 'bound');
+  const drift = Math.max(...circ.points.map(p => Math.abs(p.r - r)));
+  assert.ok(drift < 1e-3, `circular orbit drift ${drift}`);
+  // Slightly eccentric: the angle between successive closest approaches is 2π / √(1 − 3/r) (for r_s = 1).
+  const ecc = gr.orbit(r, gr.circularL(r) * 1.01, {tMax: 3000, h: .01});
+  const peri = [];
+  for (let i = 1; i < ecc.points.length - 1; i++) {
+    const [a, b, c] = [ecc.points[i - 1], ecc.points[i], ecc.points[i + 1]];
+    if (b.r < a.r && b.r <= c.r) peri.push(b.phi);
+  }
+  const advance = peri[1] - peri[0], expected = 2 * Math.PI / Math.sqrt(1 - 3 / r);
+  assert.ok(Math.abs(advance - expected) / expected < .01, `periapsis advance ${advance} vs ${expected}`);
+  // Inside the innermost stable orbit (r = 3) a slightly perturbed circular orbit falls in.
+  assert.equal(gr.orbit(2.8, gr.circularL(2.8) * .995, {tMax: 2000}).outcome, 'plunges');
+});
+
+test('a ray aimed from any point is captured below L = 3√3/2 and escapes above it', () => {
+  // At r0, an angle α from the inward direction gives L = r0 sin α / √(1 − 1/r0) (locally measured).
+  const r0 = 8, crit = 3 * Math.sqrt(3) / 2;
+  for (const [L, want] of [[crit - .05, 'captured'], [crit + .05, 'escapes']]) {
+    const sinA = L * Math.sqrt(1 - 1 / r0) / r0, cosA = Math.sqrt(1 - sinA * sinA);
+    const ray = gr.traceRay(r0, 0, -cosA, sinA);
+    assert.ok(Math.abs(ray.L - L) < 1e-9, `L ${ray.L} vs ${L}`);
+    assert.equal(ray.outcome, want, `L = ${L}`);
+  }
+  // Aimed tangentially at r = 1.5 (the photon sphere) a ray circles before leaving or falling.
+  const orbit = gr.traceRay(1.5 + 1e-6, 0, 0, 1);
+  assert.ok(gr.sweptAngle(orbit.points) > 2 * Math.PI, 'wraps at least once round the photon sphere');
+});

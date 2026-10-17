@@ -4,158 +4,127 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#ece4d2">
-<meta name="description" content="An interactive, scientifically exact look at how gravity bends light and slows time near a black hole.">
+<meta name="description" content="A black-hole lab: place clocks, aim light, drop probes and launch orbits around a black hole, and watch time slow, light bend and light cones tip over at the horizon. Exact Schwarzschild physics.">
 <title>Curved Spacetime · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Curved Spacetime · Theoria">
-<meta property="og:description" content="An interactive, scientifically exact look at how gravity bends light and slows time near a black hole.">
+<meta property="og:description" content="A black-hole lab: place clocks, aim light, drop probes and launch orbits, with exact Schwarzschild physics.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="../shared/shell.css">
-<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="lab.css">
 </head>
-<body class="v2 riso">
-<main class="stage" aria-label="Curved spacetime experiment">
-  <canvas id="scene" aria-label="Rotatable 3D view of space and time around a black hole"></canvas>
-
-  <header class="topbar">
-    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>General relativity · Curved spacetime</span></a>
-    <nav class="view-switch" aria-label="View">
-      <button id="view-space" class="active" aria-pressed="true">Space</button>
-      <button id="view-time" aria-pressed="false">Time</button>
-    </nav>
-    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-    </button>
-    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+<body>
+<main class="lab" aria-label="Black-hole lab">
+  <header class="head">
+    <a class="mark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Curved spacetime · a black-hole lab</span></a>
+    <div class="clock-readout" title="Time on a clock far from the hole">
+      <strong id="now">t = 0.0</strong><small>time far away</small>
+    </div>
+    <button id="play" class="btn play" aria-label="Pause"></button>
+    <div class="seg" role="group" aria-label="Simulation speed">
+      <button class="btn" data-speed="0.6">Slow</button>
+      <button class="btn on" data-speed="2">Normal</button>
+      <button class="btn" data-speed="7">Fast</button>
+    </div>
+    <button id="restart" class="btn" title="Start this scenario again">Restart</button>
+    <div class="seg wide-only" role="group" aria-label="Units">
+      <button class="btn on" data-scale="rs" title="Distances in Schwarzschild radii, times in the time light takes to cross one">rₛ</button>
+      <button class="btn" data-scale="sun" title="A black hole of one solar mass">Sun-mass</button>
+      <button class="btn" data-scale="sgr" title="Sagittarius A*, the black hole at the centre of the Milky Way">Sgr A*</button>
+    </div>
+    <button id="about" class="btn round" aria-label="What is calculated, and how" title="The physics">i</button>
+    <a class="next wide-only" href="../special-relativity/">Next: Special relativity →</a>
   </header>
 
-  <section class="story glass" id="story" aria-live="polite"></section>
+  <aside class="notes" aria-label="Scenarios and tools">
+    <div class="scenario-block">
+      <p class="eyebrow">Scenarios</p>
+      <div class="chips" id="chips"></div>
+      <div class="scenario" id="scenario" aria-live="polite"></div>
+      <div class="insight" id="insight" aria-live="polite"></div>
+    </div>
+    <div class="bench-block">
+      <p class="eyebrow">Tools · click in figure 1</p>
+      <div class="tools" id="tools">
+        <button class="btn on" data-tool="move" aria-pressed="true">Move</button>
+        <button class="btn" data-tool="clock" aria-pressed="false">+ Clock</button>
+        <button class="btn" data-tool="ray" aria-pressed="false">+ Light</button>
+        <button class="btn" data-tool="probe" aria-pressed="false">Drop probe</button>
+        <button class="btn" data-tool="orbit" aria-pressed="false">+ Orbit</button>
+        <button class="btn" data-tool="beacon" aria-pressed="false">Signals</button>
+      </div>
+      <p class="tool-hint" id="tool-hint"></p>
+      <label class="slider" id="push-row" hidden><span>Launch speed <output id="out-push">1.00 × circular</output></span>
+        <input id="push" type="range" min="0.6" max="1.35" step="0.01" value="1" aria-label="Orbit launch speed relative to a circular orbit"></label>
+      <p class="eyebrow" style="margin-top:14px">Instruments</p>
+      <ul class="instruments" id="instruments"></ul>
+      <p class="scale-note" id="scale-note"></p>
+      <button id="clear" class="btn" style="margin-top:8px">Clear everything</button>
+    </div>
+  </aside>
 
-  <div class="labels" aria-hidden="true">
-    <div class="scene-label" id="label-a"><div class="tag"><span class="name"><i class="swatch" style="--c:#c8541f"></i>A</span><span class="detail" id="label-a-tau"></span></div></div>
-    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#56612a"></i>B</span><span class="detail" id="label-b-tau"></span></div></div>
-    <div class="scene-label" id="label-c"><div class="tag"><span class="name"><i class="swatch" style="--c:#2f3614"></i>C</span><span class="detail" id="label-c-tau"></span></div></div>
-    <div class="scene-label landmark" id="label-horizon"><div class="tag"><span class="name" id="label-horizon-text">Event horizon · 1 rₛ</span></div></div>
-    <div class="scene-label landmark" id="label-photon"><div class="tag"><span class="name">Photon sphere · 1.5 rₛ</span></div></div>
-    <div class="scene-label landmark" id="label-isco"><div class="tag"><span class="name">Innermost stable orbit · 3 rₛ</span></div></div>
-    <div id="dynamic-labels"></div>
-  </div>
-
-  <section class="readout glass" id="readout" aria-label="Clock readings">
-    <div class="readout-row" id="row-far">
-      <i class="swatch" style="--c:#8a8c68"></i>
-      <span class="who">Far-away clock<small>the reference</small></span>
-      <strong id="far-tau"></strong>
-      <span class="bar"><i id="bar-far" style="--c:#8a8c68"></i></span>
-    </div>
-    <div class="readout-row" id="row-a">
-      <i class="swatch" style="--c:#c8541f"></i>
-      <span class="who">Clock A<small id="a-where"></small></span>
-      <strong id="a-tau"></strong>
-      <span class="sub" id="a-sub"></span>
-      <span class="bar"><i id="bar-a" style="--c:#c8541f"></i></span>
-    </div>
-    <div class="readout-row" id="row-b">
-      <i class="swatch" style="--c:#56612a"></i>
-      <span class="who">Clock B<small id="b-where"></small></span>
-      <strong id="b-tau"></strong>
-      <span class="sub" id="b-sub"></span>
-      <span class="bar"><i id="bar-b" style="--c:#56612a"></i></span>
-    </div>
-    <div class="readout-row" id="row-c">
-      <i class="swatch" style="--c:#2f3614"></i>
-      <span class="who">Clock C<small id="c-where"></small></span>
-      <strong id="c-tau"></strong>
-      <span class="sub" id="c-sub"></span>
-      <span class="bar"><i id="bar-c" style="--c:#2f3614"></i></span>
+  <section class="fig" id="fig-top" aria-label="Figure 1, seen from above">
+    <div class="fig-head"><span class="num">1</span><h2>Seen from above</h2>
+      <p>The plane around the hole, drawn to scale. Light and matter follow their exact paths; each clock’s hand turns at its own rate.</p>
+      <div class="key">
+        <span><i class="fill" style="--c:#2f3614"></i>Horizon 1 rₛ</span>
+        <span><i class="dash" style="--c:#c8541f"></i>Photon sphere 1.5</span>
+        <span><i class="dash" style="--c:#8a8c68"></i>Innermost stable orbit 3</span>
+        <span><i style="--c:#56612a"></i>Light that escapes</span>
+        <span><i style="--c:#c8541f"></i>Light that falls in</span>
+      </div></div>
+    <div class="canvas-wrap">
+      <canvas id="c-top" aria-label="Top view of the black hole with clocks, light rays, probes and orbits"></canvas>
+      <div class="zoom"><button class="btn" id="zoom-in" aria-label="Zoom in">+</button><button class="btn" id="zoom-out" aria-label="Zoom out">−</button></div>
     </div>
   </section>
 
-  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
-    <span class="eyebrow">Show</span>
-    <div class="chips">
-      <button class="chip" data-layer="clocks" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Clocks</button>
-      <button class="chip" data-layer="signals" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Signals</button>
-      <button class="chip" data-layer="light" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>Light rays</button>
-      <button class="chip" data-layer="falling" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Falling clock</button>
-      <button class="chip" data-layer="landmarks" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Landmarks</button>
+  <section class="fig" id="fig-rate" aria-label="Figure 2, how fast clocks tick">
+    <div class="fig-head"><span class="num">2</span><h2>How fast each clock ticks</h2>
+      <p>A clock held still at distance r runs at √(1 − 1/r) of a far-away clock’s rate. Drag a clock’s dot along the curve to move it. Same r axis as figure 3.</p></div>
+    <div class="canvas-wrap"><canvas id="c-rate" aria-label="Graph of clock rate against distance from the hole"></canvas></div>
+  </section>
+
+  <section class="fig" id="fig-diag" aria-label="Figure 3, spacetime map">
+    <div class="fig-head"><span class="num">3</span><h2>Spacetime map: distance across, time up</h2>
+      <p>Every path is a line climbing the page. The small cones show where light can go from each point. Outside the horizon one edge points out; inside, both lean in, so every future leads to r = 0.</p>
+      <div class="key">
+        <span><i class="fill" style="--c:#c9c9a3"></i>Light cone (future)</span>
+        <span><i style="--c:#2f3614"></i>Path of a clock or probe</span>
+        <span><i class="dash" style="--c:#c8541f"></i>Now</span>
+      </div></div>
+    <div class="canvas-wrap">
+      <canvas id="c-diag" aria-label="Spacetime diagram with light cones that tip over at the horizon"></canvas>
     </div>
-    <details class="settings">
-      <summary>Settings</summary>
-      <label><span><i class="swatch" style="--c:#56612a"></i>Clock B height <output id="out-b"></output></span>
-        <input id="radius-b" type="range" min="1.2" max="11" step="0.1" value="8" aria-label="Clock B radius"></label>
-      <p class="hint">Heights are distances from the centre in Schwarzschild radii (rₛ). Changes apply immediately.</p>
-    </details>
-  </aside>
-
-  <footer class="transport dock glass" id="transport">
-    <button id="play" class="round-button" aria-label="Play"></button>
-    <div class="timeline">
-      <div class="timeline-label">
-        <span>Far-away time<b id="time-readout">0.0</b>rₛ/c</span>
-        <span class="note" id="view-note"></span>
-      </div>
-      <div class="track">
-        <input id="scrub" type="range" min="0" max="60" step="0.05" value="0" aria-label="Far-away (coordinate) time">
-        <div class="markers" id="markers" aria-hidden="true"></div>
-      </div>
-    </div>
-    <div class="dock-group speed">
-      <span class="dock-label">Clock A at <output id="out-a"></output></span>
-      <input id="radius-a" type="range" min="1.2" max="11" step="0.1" value="2.4" aria-label="Clock A radius">
-    </div>
-    <div class="dock-group speed">
-      <span class="dock-label">Drop C from <output id="out-c"></output></span>
-      <input id="radius-c" type="range" min="1.5" max="12" step="0.1" value="6" aria-label="Clock C release radius">
-    </div>
-    <div class="dock-actions">
-      <button id="replay" class="text-button" title="Replay (R)">Replay</button>
-      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
-    </div>
-  </footer>
-  <div id="tip" role="status" aria-live="polite"></div>
-
-  <div id="toast" role="status"></div>
-  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
-
-  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
-    <button class="icon-button close" aria-label="Close">×</button>
-    <span class="eyebrow">Behind the image</span>
-    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
-    <p>The model is the Schwarzschild solution of Einstein’s equations: the spacetime outside a non-rotating, uncharged, spherical mass. Lengths are in Schwarzschild radii (rₛ = 2GM/c²) and times in rₛ/c. For a black hole the mass of the Sun, rₛ ≈ 3 km and rₛ/c ≈ 10 μs.</p>
-
-    <h3>Far-away time</h3>
-    <p>The timeline is Schwarzschild coordinate time t: the time kept by an observer at rest very far away. Everything in the scene is shown at the same value of t.</p>
-
-    <h3>Clocks A and B</h3>
-    <p>Static clocks, held at fixed height (they need a rocket or a tower to stay put). Their own time τ runs at</p>
-    <span class="eq">dτ/dt = √(1 − rₛ/r)</span>
-
-    <h3>Signals</h3>
-    <p>Flashes travel radially from A to B along exact null paths, r + ln(r/rₛ − 1) = ±ct + const. Because the spacetime does not change with t, every flash takes the same coordinate time, so the spacing in B’s own time is stretched by √(1 − rₛ/r<sub>B</sub>) / √(1 − rₛ/r<sub>A</sub>). This is gravitational redshift: the same factor multiplies the wavelength, measured by clocks at rest at each height. Emitted light is set to 470 nm.</p>
-
-    <h3>Light rays</h3>
-    <p>Null geodesics integrated numerically (fourth-order Runge–Kutta, checked against the conserved null constraint and against the known deflection series). Rays with impact parameter below 3√3/2 rₛ are captured; the dark ray starts just above it and orbits near the photon sphere at 1.5 rₛ.</p>
-
-    <h3>Falling clock C</h3>
-    <p>Dropped from rest at radius R, it follows the exact radial geodesic r = R/2 (1 + cos η), τ = R<sup>3/2</sup>/2 (η + sin η). Its own time to reach the horizon is finite (22.4 rₛ/c from 6 rₛ), and to reach the centre only 0.7 more. In far-away time t it approaches the horizon forever and is never seen to cross.</p>
-
-    <h3>Space view</h3>
-    <p>The surface is Flamm’s paraboloid, z = 2√(rₛ(r − rₛ)): an exact, unexaggerated picture of the curved geometry of space around the mass, for one equatorial slice at one moment. Its depth shows extra distance, not time and not a rubber sheet pulled down by weight.</p>
-
-    <h3>Time view</h3>
-    <p>Two space dimensions plus coordinate time drawn upward. Ticks on each worldline are equal steps of that clock’s own time. Spatial curvature is not shown in this view; the transition between views is only a visual blend.</p>
-
-    <h3>Touch and keys</h3>
-    <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash to see when and where it happened. Keys: Space play/pause, ← → step, T Space/Time, R replay.</p>
-
-    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each hand turns once per unit of that clock’s own time), the solid ball marking the horizon, the printed look of lines and dots, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
-
-    <p>Further reading: <a href="https://jila.colorado.edu/~ajsh/astr3740_17/grbook.pdf" target="_blank" rel="noopener">Hamilton · General Relativity, Black Holes and Cosmology</a> · <a href="https://www.einstein-online.info/en/spacetime/" target="_blank" rel="noopener">Einstein Online · Spacetime</a></p>
-    <span class="version">Theoria · General relativity 0.4 · Schwarzschild exterior</span>
-  </dialog>
+  </section>
 </main>
+<div class="tip" id="tip" role="status"></div>
+
+<dialog class="about" id="notes" aria-labelledby="notes-heading">
+  <button class="btn round close" aria-label="Close">×</button>
+  <p class="eyebrow">Behind the figures</p>
+  <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+  <p>Everything moves by the Schwarzschild solution of Einstein’s equations: the spacetime outside a non-rotating, uncharged mass. Distances are in Schwarzschild radii rₛ (the radius of the horizon) and times in rₛ/c, the time light takes to cross one. The real-scale switch converts them for a black hole of one solar mass (rₛ ≈ 2.95 km) or for Sagittarius A* (about 4.3 million solar masses, rₛ ≈ 12.7 million km).</p>
+  <span class="eq">dτ² = (1 − 1/r) dt² − dr² / (1 − 1/r) − r² dφ²</span>
+
+  <h3>Clocks</h3>
+  <p>A clock held still at r ticks at √(1 − 1/r) of the rate of a clock far away. This is not an illusion of signal delays: compare the clocks afterwards and the low one has aged less. No clock can be held still at or inside the horizon.</p>
+
+  <h3>Light and orbits</h3>
+  <p>Light rays and orbits are integrated exactly (fourth-order Runge–Kutta on the geodesic equations, with conserved energy and angular momentum). A ray’s direction is the direction measured by an observer held still where it starts. Light passing at less than 3√3/2 ≈ 2.6 rₛ from the centre (impact parameter) falls in; at 1.5 rₛ light can circle the hole. Circular orbits of matter are stable only outside 3 rₛ; orbits precess, by 2π / √(1 − 3/r) per lap for nearly circular ones.</p>
+
+  <h3>Time, and crossing the horizon</h3>
+  <p>The shared clock and figure 3 use Eddington–Finkelstein time t̃ = t + ln|r − 1|. Far away it ticks exactly like Schwarzschild time t, but unlike t it stays finite at the horizon, so a falling probe can be followed through it. In these coordinates ingoing light always moves at one unit of r per unit of t̃, and the outgoing edge of each light cone turns vertical at r = 1 and points inwards inside it.</p>
+  <span class="eq">dt̃/dr = −1 (ingoing),  (r + 1)/(r − 1) (outgoing)</span>
+  <p>A probe dropped from rest falls on the exact cycloid r = R/2 (1 + cos η), τ = R<sup>3/2</sup>/2 (η + sin η): it crosses the horizon after a finite time on its own clock and reaches r = 0 soon after. Its signals are sent every 2 units of its own time and travel outwards along radial light rays; those sent from inside the horizon also move inwards.</p>
+
+  <h3>Touch and keys</h3>
+  <p>Space pause · R restart · 1–6 scenarios · scroll or + / − to zoom figure 1. Hover over anything for its numbers.</p>
+
+  <p class="honest">Drawn for clarity: the size of clocks, probes and arrows, and the speed of the animation. Figure 1 is a snapshot at one value of t̃, so it shows light “now” in that slicing. Rotation, charge, tides and the hole’s growth are left out, and a real probe would be torn apart near a solar-mass hole well before the horizon (not near Sagittarius A*).</p>
+  <p>Further reading: Taylor &amp; Wheeler, <em>Exploring Black Holes</em> · Misner, Thorne &amp; Wheeler, <em>Gravitation</em>, §31</p>
+  <p class="eyebrow" style="margin-top:12px">Theoria · Curved spacetime 0.5 · Black-hole lab</p>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>
