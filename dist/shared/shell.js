@@ -98,6 +98,17 @@ export function createTransport({max, speed = 2, onChange}) {
   return transport;
 }
 
+/** The concepts in their suggested order, for the "next concept" link at the end of each tour. */
+const CONCEPTS = [
+  ['general-relativity', 'Curved spacetime'], ['special-relativity', 'Special relativity'],
+  ['light', 'Light as a wave'], ['quantum', 'Quantum waves'], ['entropy', 'Entropy and time’s arrow'],
+];
+function nextConcept() {
+  const here = location.pathname.split('/').filter(part => part && part !== 'index.html').at(-1);
+  const k = CONCEPTS.findIndex(([slug]) => slug === here);
+  return k < 0 ? null : CONCEPTS[(k + 1) % CONCEPTS.length];
+}
+
 /**
  * Guided tour. Each step has a title, body (trusted HTML), optional `notice` and `maths`.
  * `onEnter(step, index)` applies the step to the scene.
@@ -132,7 +143,8 @@ export function createStory({steps, onEnter}) {
     const step = steps[index], last = index === steps.length - 1;
     $('story-count').textContent = step.eyebrow ?? `Guided tour · ${index + 1} of ${steps.length - 1}`;
     $('story-title').innerHTML = step.title;
-    $('story-text').innerHTML = step.body;
+    const next = last && nextConcept();
+    $('story-text').innerHTML = step.body + (next ? `<a class="next-concept" href="../${next[0]}/"><span><small>Next concept</small>${next[1]}</span><span class="arrow" aria-hidden="true">→</span></a>` : '');
     $('story-notice').innerHTML = step.notice ? `<span>Look for</span>${step.notice}` : '';
     $('story-notice').hidden = !step.notice;
     $('story-maths').innerHTML = step.maths ? `<span>The maths</span>${step.maths}` : '';

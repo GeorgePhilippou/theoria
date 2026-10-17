@@ -251,7 +251,7 @@ function rebuild() {
   ];
   if (settings.roundTrip) candidates.push({e: trip.centreAt(trip.legs[1].tau0), title: 'The ship turns around'});
   const g = sr.gamma(settings.v);
-  $('out-v').textContent = `${settings.v.toFixed(2)} c · γ ${g.toFixed(2)}`;
+  $('out-v').innerHTML = `${settings.v.toFixed(2)} c<span class="wide-only"> · γ ${g.toFixed(2)}</span>`;
   $('speed').value = settings.v;
   $('speed').style.setProperty('--progress', `${(settings.v - .1) / .88 * 100}%`);
   $('round-trip').checked = settings.roundTrip;

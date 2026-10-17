@@ -412,7 +412,7 @@ const FRAMING = {
   // For the slits, look from the source side so the detector screen faces the camera.
   slits: () => narrow() ? [-14, 23, 23] : [-9.5, 12, 14.5],
   top: () => narrow() ? [0, 40, .5] : [0, 24, .5],
-  atom: () => narrow() ? [0, 5, 24] : [0, 4, 15],
+  atom: () => narrow() ? [0, 3.5, 17] : [0, 4, 15],
 };
 const offset = new THREE.Vector3(), target = new THREE.Vector3();
 let offsetTween = null;

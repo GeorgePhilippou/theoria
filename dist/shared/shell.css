@@ -387,3 +387,22 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
   .story:not(.more) .story-text p + p { display: none; }
   .story-text p:last-child { margin-bottom: 2px; }
 }
+
+/* Readout: a little wider on desktop so two-word labels do not wrap; full width on phones. */
+.v2 .readout { width: 320px; }
+@media (max-width: 720px) {
+  .v2 .readout { width: auto; }
+  /* Long slider labels (e.g. "Ship speed 0.60 c · γ 1.25") wrap instead of running into the buttons. */
+  .dock-group.speed .dock-label { white-space: normal; line-height: 1.35; }
+}
+
+/* Link to the next concept, at the end of each tour */
+.next-concept {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 13.5px;
+  transition: border-color .2s, background .2s;
+}
+.next-concept small { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); }
+.next-concept:hover { border-color: rgba(169, 223, 238, .5); background: rgba(255, 255, 255, .04); }
+.next-concept .arrow { color: var(--accent); font-size: 16px; }

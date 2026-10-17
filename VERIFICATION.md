@@ -55,3 +55,10 @@
 - Shared: on phones the tour card shows only its first paragraph (Read more for the rest), which fixes the cramped phone layouts. The home page Light and Quantum cards were links closed with the wrong tag; fixed.
 - Checked in the in-app browser at 1440×900 and 375×812, with no console errors.
 - Not yet tested: a real iPad or iPhone, screen readers.
+
+# Interface polish pass (17 Oct 2026)
+
+- Reviewed all five pages and the home page at 1440×900 and 375×812.
+- Fixed: the readout now spans the full width on phones (a desktop width rule was overriding the phone layout); special relativity's ship-speed label no longer runs into Layers on phones (γ is shown on wider screens only); the home page now scrolls the window rather than the body.
+- Added: a "Next concept" link at the end of each tour (in the order curved spacetime → special relativity → light → quantum → entropy, then round again); a favicon and share titles and descriptions on every page; subject names in place of version numbers on the home cards; a redrawn entropy card; a slightly wider readout on desktop; a closer hydrogen-atom camera on phones.
+- No console errors on any page. All 35 tests pass; physics is unchanged.
