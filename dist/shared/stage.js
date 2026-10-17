@@ -16,7 +16,24 @@ export const BACKGROUND = 0x060a11;
  * `viewShift()` returns [x, y] pixels to move the scene's centre, so it sits in the space
  * the interface panels leave free.
  */
-export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0], bloom = {}}) {
+export const PAPER = 0xece4d2;
+/** The two-ink palette for the paper theme: olive and burnt orange, their pale tints, and a dark olive for "black". */
+export const INK = {
+  paper: PAPER, paper2: 0xf4eee0, olive: 0x56612a, dark: 0x2f3614, spot: 0xc8541f,
+  oliveTint: 0xb9bb8e, spotTint: 0xe7a57f, grey: 0x8a8c68,
+};
+const PAPER_RGB = new THREE.Color(PAPER);
+/** An ink printed at partial strength k (0 to 1): mixed towards the paper, as a pale or half-tone print would be. */
+export function inkFade(color, k, target = new THREE.Color()) {
+  return target.copy(PAPER_RGB).lerp(color instanceof THREE.Color ? color : new THREE.Color(color), Math.max(0, Math.min(1, k)));
+}
+
+/**
+ * `theme: 'paper'` gives a printed look: the scene sits on oat paper, with no sky, no stars and no bloom,
+ * and fog fades distant things into the paper rather than into the night.
+ */
+export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0], bloom = {}, theme = 'night'}) {
+  const paper = theme === 'paper', ground = paper ? PAPER : BACKGROUND;
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({canvas, antialias: true, powerPreference: 'high-performance'});
@@ -28,28 +45,28 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(BACKGROUND);
-  scene.fog = new THREE.Fog(BACKGROUND, 30, 90);
+  scene.background = new THREE.Color(ground);
+  scene.fog = new THREE.Fog(ground, 30, 90);
   const camera = new THREE.PerspectiveCamera(fov, 1, .05, 400);
   const controls = new OrbitControls(camera, renderer.domElement);
   Object.assign(controls, {enableDamping: true, dampingFactor: .08, enablePan: false, rotateSpeed: .55, zoomSpeed: .8});
 
-  scene.add(new THREE.HemisphereLight(0xc6dcff, 0x0a0e16, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff4e6, 2.2);
+  scene.add(paper ? new THREE.HemisphereLight(0xfffaf0, 0xb9b08f, 2.2) : new THREE.HemisphereLight(0xc6dcff, 0x0a0e16, 1.1));
+  const sun = new THREE.DirectionalLight(0xfff4e6, paper ? 1.2 : 2.2);
   sun.position.set(8, 14, 10);
   scene.add(sun);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), bloom.strength ?? .7, bloom.radius ?? .6, bloom.threshold ?? .55);
-  composer.addPass(bloomPass);
+  if (!paper) composer.addPass(bloomPass);   // printed ink does not glow
   composer.addPass(new OutputPass());
 
   const lineMaterials = new Set();
   const glow = glowTexture();
 
   const stage = {
-    THREE, renderer, scene, camera, controls, composer, bloomPass, onContextLost: null,
+    paper, THREE, renderer, scene, camera, controls, composer, bloomPass, onContextLost: null,
     resize() {
       const w = innerWidth, h = innerHeight;
       renderer.setSize(w, h);
@@ -68,9 +85,12 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
     },
     /** Soft additive glow, for points of light. Bright enough to bloom. */
     sprite(color, size, parent = scene, {opacity = 1} = {}) {
+      // On paper a point of light is printed as a solid dot; at night it glows.
       const s = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: glow, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending,
+        map: paper ? dotTexture() : glow, color, transparent: true, opacity, depthWrite: false,
+        blending: paper ? THREE.NormalBlending : THREE.AdditiveBlending,
       }));
+      if (paper) size *= .35;
       s.scale.set(size, size, 1);
       parent.add(s);
       return s;
@@ -85,7 +105,8 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
       const material = new LineMaterial({
         color: vertexColors ? 0xffffff : color, linewidth: width, transparent: true, opacity, dashed,
         dashSize: dash[0], gapSize: dash[1], vertexColors, depthWrite: false,
-        blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        // Ink does not add up like light: on paper every line is printed with normal blending.
+        blending: additive && !paper ? THREE.AdditiveBlending : THREE.NormalBlending,
       });
       material.resolution.set(innerWidth, innerHeight);
       lineMaterials.add(material);
@@ -149,7 +170,7 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
     },
   };
 
-  addSky(scene);
+  if (!paper) addSky(scene);
   addEventListener('resize', () => stage.resize());
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault();
@@ -158,6 +179,20 @@ export function createStage({canvas, fallback, fov = 38, viewShift = () => [0, 0
   });
   stage.resize();
   return stage;
+}
+
+let dot = null;
+/** A crisp filled disc, for printed dots. */
+export function dotTexture() {
+  if (dot) return dot;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(32, 32, 28, 0, Math.PI * 2); ctx.fill();
+  dot = new THREE.CanvasTexture(c);
+  dot.colorSpace = THREE.SRGBColorSpace;
+  return dot;
 }
 
 function glowTexture() {

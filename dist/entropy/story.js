@@ -20,9 +20,9 @@ export const steps = [
   },
   {
     title: 'Heat flows from hot to cold.',
-    body: `<p>Fast, <b>hot</b> atoms ${sw('#ff9c4a')} on the left; slow, <b>cold</b> atoms ${sw('#4f7dff')} on the right. When the wall lifts, collisions pass energy from fast atoms to slow ones until the whole box shares one temperature.</p>
+    body: `<p>Fast, <b>hot</b> atoms ${sw('#c8541f')} on the left; slow, <b>cold</b> atoms ${sw('#56612a')} on the right. When the wall lifts, collisions pass energy from fast atoms to slow ones until the whole box shares one temperature.</p>
       <p>No force pushes heat one way. Again it is the odds: there are far more ways to share energy evenly.</p>`,
-    notice: 'The floor is a thermal map: amber where the atoms are hot, blue where they are cold. Watch the colours even out, and the two temperatures in the readout meet.',
+    notice: 'The floor is a thermal map: orange where the atoms are hot, olive where they are cold. Watch the colours even out, and the two temperatures in the readout meet.',
     maths: 'ΔS = N k ln(T<sub>final</sub> / √(T<sub>hot</sub> T<sub>cold</sub>)) > 0',
     experiment: 'heat', layers: {cells: true, histogram: true, origin: false, track: false},
   },
@@ -30,15 +30,15 @@ export const steps = [
     title: 'Run it backwards.',
     body: `<p>Every collision obeys laws that work just as well <b>backwards</b>. So if every atom’s velocity is flipped, the gas should un-spread.</p>
       <p>It does. The atoms retrace their paths and gather back into the left half, <b>exactly</b>: this model is computed in whole numbers, so nothing is lost to rounding.</p>`,
-    notice: 'At t = 16 time is reversed. The entropy curve retraces itself, in violet, all the way back to the start.',
+    notice: 'At t = 16 time is reversed. The entropy curve retraces itself, in orange, all the way back to the start.',
     maths: 'Newton’s laws are unchanged by t → −t',
     experiment: 'spread', reverseAt: 16, nudge: false, layers: {cells: true, histogram: false, origin: false, track: true},
   },
   {
     title: 'Why time has an arrow.',
-    body: `<p>The same again, but just before the reversal one atom ${sw('#ffffff')} is nudged by <b>a millionth of its width</b>. Every collision magnifies the error, it spreads to all the atoms, and the gas never gathers again.</p>
+    body: `<p>The same again, but just before the reversal one atom ${sw('#2f3614')} is nudged by <b>a millionth of its width</b>. Every collision magnifies the error, it spreads to all the atoms, and the gas never gathers again.</p>
       <p>The laws themselves do not pick a direction of time. The arrow comes from the odds, and from the universe having begun in a very special, low-entropy state.</p>`,
-    notice: 'This time the violet curve does not come back down. The readout gives the odds of the gas returning by chance.',
+    notice: 'This time the orange curve does not come back down. The readout gives the odds of the gas returning by chance.',
     maths: 'odds of a return by chance ≈ e<sup>−N ΔS / k</sup>',
     experiment: 'spread', reverseAt: 16, nudge: true, layers: {cells: true, histogram: false, origin: false, track: true},
   },

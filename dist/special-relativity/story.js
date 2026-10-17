@@ -1,6 +1,6 @@
 // Guided tour for special relativity. Each step sets the frame, the trip, the view and the layers.
 const sw = color => `<i class="swatch" style="--c:${color}"></i>`;
-export const SWATCH = {earth: '#f0bd86', ship: '#9fe3ef', photon: '#fff3c4', flash: '#c9b8ff'};
+export const SWATCH = {earth: '#c8541f', ship: '#56612a', photon: '#2f3614', flash: '#2f3614'};
 
 export const steps = [
   {
@@ -15,7 +15,7 @@ export const steps = [
     title: 'Time as a direction.',
     body: `<p>Now time runs upward and each object draws a <b>worldline</b>. Ticks mark each clock’s own seconds; the ship’s are stretched out.</p>
       <p>Light always travels at 45°, along the <b>light cone</b>. The curved lines are the same in every frame: ticks of equal own-time from Earth and ship land on the same curve.</p>`,
-    notice: 'The two glowing ticks: the ship’s 8th and Earth’s 8th second sit on the same curve.',
+    notice: 'The two orange dots: the ship’s 8th and Earth’s 8th second sit on the same curve.',
     maths: 'τ² = t² − x²/c²  is the same for every observer',
     frame: 'earth', trip: 'cruise', view: 'time', layers: {clock: true, invariants: true},
   },
@@ -31,7 +31,7 @@ export const steps = [
     title: 'Change your point of view.',
     body: `<p>Now the same events are seen from the ship. The whole diagram <b>tilts</b>: every event slides along its curve, and the light cone stays put.</p>
       <p>The ship is at rest and its ends are lit together. Earth now moves, and <b>Earth’s clock runs slow</b>. Each sees the other’s clock lagging.</p>`,
-    notice: 'Earth’s “now” (amber sheet) is tilted, the ship’s (cyan) is flat.',
+    notice: 'Earth’s “now” (orange sheet) is tilted, the ship’s (olive) is flat.',
     maths: 't′ = γ (t − v x / c²),  x′ = γ (x − v t)',
     frame: 'ship', trip: 'cruise', view: 'time', layers: {flash: true, simultaneity: true, invariants: true},
   },
@@ -47,7 +47,7 @@ export const steps = [
     title: 'The twin paradox.',
     body: `<p>The ship flies out and comes home. Back on Earth, <b>the traveller is younger</b>: its clock shows 16 against Earth’s 20 at 0.6 c. Make the units years and nothing changes.</p>
       <p>The trip is not symmetric: only the ship turns around. At the turn its “now” swings, and the Earth time it regards as “now” jumps forward. The straight worldline always has the most time.</p>`,
-    notice: 'The cyan “now” sheet sweeps across Earth’s worldline at the turn.',
+    notice: 'The olive “now” sheet sweeps across Earth’s worldline at the turn.',
     maths: 'τ = ∫ √(1 − v²/c²) dt',
     frame: 'earth', trip: 'round', view: 'time', layers: {clock: true, simultaneity: true},
   },

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b12">
+<meta name="theme-color" content="#ece4d2">
 <meta name="description" content="The Schrödinger equation, solved live: a particle as a wave, the double slit dot by dot, tunnelling through walls, and the exact shapes of hydrogen orbitals.">
 <title>Quantum Waves · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body class="v2">
+<body class="v2 riso">
 <main class="stage" aria-label="Quantum waves experiment">
   <canvas id="scene" aria-label="3D view of a quantum wavefunction"></canvas>
 
@@ -39,21 +39,21 @@
     <div class="scene-label landmark" id="label-nucleus"><div class="tag"><span class="name">Nucleus</span></div></div>
     <div class="scene-label landmark" id="label-reflected"><div class="tag"><span class="name" id="label-reflected-text"></span></div></div>
     <div class="scene-label landmark" id="label-transmitted"><div class="tag"><span class="name" id="label-transmitted-text"></span></div></div>
-    <div class="scene-label landmark" id="label-found"><div class="tag"><span class="name" style="color:#fff">Found here</span></div></div>
+    <div class="scene-label landmark" id="label-found"><div class="tag"><span class="name" style="color:#c8541f">Found here</span></div></div>
     <div class="scene-label curve" id="label-spread"><div class="tag"><span class="name" id="label-spread-text"></span></div></div>
   </div>
 
   <section class="readout glass" id="readout" aria-label="Measurements">
-    <div class="readout-row"><i class="swatch" style="--c:#c9b8ff"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#7fe0f0"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#ffa848"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#2f3614"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3"></strong></div>
   </section>
 
   <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
     <span class="eyebrow">Show</span>
     <div class="chips">
-      <button class="chip" data-layer="phase" aria-pressed="false"><i class="swatch" style="--c:#c9b8ff"></i>Phase colours</button>
-      <button class="chip" data-layer="detector" aria-pressed="false"><i class="swatch" style="--c:#7fe0f0"></i>Detector screen</button>
+      <button class="chip" data-layer="phase" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Phase colours</button>
+      <button class="chip" data-layer="detector" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Detector screen</button>
     </div>
     <details class="settings" open>
       <summary>Settings</summary>

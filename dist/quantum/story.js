@@ -29,7 +29,7 @@ export const steps = [
   {
     title: 'The shape of an atom.',
     body: `<p>An electron in an atom does not orbit like a planet. It forms a <b>standing wave</b> around the nucleus, and only certain shapes fit: these are the <b>orbitals</b>.</p>
-      <p>Each dot is a place the electron could be found, drawn in proportion to the exact probability. ${sw('#ffa848')} and ${sw('#3a85ff')} mark opposite signs of the wave.</p>`,
+      <p>Each dot is a place the electron could be found, drawn in proportion to the exact probability. ${sw('#c8541f')} and ${sw('#56612a')} mark opposite signs of the wave.</p>`,
     notice: 'Try 2s and 3p: the gaps (nodes) are places the electron is never found.',
     maths: 'Eₙ = −13.6 eV / n²',
     experiment: 'atom', orbital: '2p', view: 'surface', layers: {phase: true},

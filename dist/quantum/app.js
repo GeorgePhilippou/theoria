@@ -1,7 +1,7 @@
 // Quantum waves: a live Schrödinger solver drawn as a phase-coloured probability surface,
 // plus exact hydrogen orbitals as clouds of sampled positions.
 import * as THREE from 'three';
-import {createStage} from '../shared/stage.js';
+import {createStage, INK} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as q from './physics.js';
 import {steps} from './story.js';
@@ -18,7 +18,9 @@ const PARAM = {
   slits: {name: 'Slit gap', min: 6, max: 20, step: .5, key: 'gap', format: v => `${v.toFixed(1)} units`},
   tunnel: {name: 'Barrier V₀', min: .4, max: 3, step: .05, key: 'V0', format: v => v.toFixed(2)},
 };
-const COLOR = {barrier: 0xb9a4ff, energy: 0xffc56b, dot: 0x9ff0ff, plus: 0xffa848, minus: 0x3a85ff};
+// Paper palette: barrier olive, energy burnt orange, detections dark ink; orbital signs orange (+) and olive (−).
+// The wave's phase keeps its colour wheel: there the hue is the physics.
+const COLOR = {barrier: INK.oliveTint, energy: INK.spot, dot: INK.dark, plus: INK.spot, minus: INK.olive};
 
 const settings = {experiment: 'packet', k: 1.4, gap: 12, V0: 1.6, orbital: '2p', rate: 1};
 const layers = {phase: true, detector: false};
@@ -27,7 +29,7 @@ let heightOn = 1, targetHeight = 1, playing = !reducedMotion, stepDebt = 0;
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), bloom: {strength: .3, radius: .45, threshold: .9},
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     if (!narrow()) return [24, 0];
     const top = $('story').getBoundingClientRect().bottom;
@@ -127,37 +129,37 @@ const surfaceMaterial = new THREE.ShaderMaterial({
       if (alpha <= 0.0) discard;
       float a = vData.r;
       float phase = atan(vData.b * 2.0 - 1.0, vData.g * 2.0 - 1.0) / 6.2831853 + 0.5;
-      // An empty region is a dark sheet with a faint grid, 8 units apart, that fades where the wave is.
+      // An empty region is paper with a faint olive grid, 8 units apart, that fades where the wave is.
       vec2 q = vUv * size / 8.0;
       vec2 g = abs(fract(q - 0.5) - 0.5) / fwidth(q);
       float grid = 1.0 - min(min(g.x, g.y), 1.0);
-      vec3 dark = mix(vec3(0.09, 0.12, 0.18), vec3(0.24, 0.32, 0.44), grid * 0.6);
-      vec3 hue = hsv(phase, 0.6, 0.95);
-      vec3 plain = vec3(0.72, 0.9, 1.0);
+      vec3 dark = mix(vec3(0.93, 0.89, 0.82), vec3(0.34, 0.38, 0.16), grid * 0.35);
+      vec3 hue = hsv(phase, 0.62, 0.84);
+      vec3 plain = vec3(0.34, 0.38, 0.16);
       vec3 base = mix(dark, mix(plain, hue, phaseMix), smoothstep(0.0, 0.9, pow(a, 0.75)));
       vec3 n = normalize(vNormal);
       vec3 l = normalize((viewMatrix * vec4(light, 0.0)).xyz);
       float diff = max(dot(n, l), 0.0);
       float spec = pow(max(dot(reflect(-l, n), vView), 0.0), 40.0);
-      vec3 color = base * (0.4 + 0.6 * diff) + spec * 0.2 * smoothstep(0.05, 0.4, a);
-      if (vData.a > 0.5) color = mix(color, vec3(0.62, 0.52, 0.95), 0.25);
+      vec3 color = base * (0.74 + 0.34 * diff) + spec * 0.06 * smoothstep(0.05, 0.4, a);
+      if (vData.a > 0.5) color = mix(color, vec3(0.73, 0.73, 0.56), 0.4);
       // Colours above are written in display (sRGB) terms; convert to linear for the renderer.
       gl_FragColor = vec4(pow(max(color, 0.0), vec3(2.2)), alpha);
     }`,
 });
 group.wave.add(new THREE.Mesh(surfaceGeometry, surfaceMaterial));
 {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WX * 1.4, WZ * 1.8), new THREE.MeshBasicMaterial({color: 0x05080e}));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WX * 1.4, WZ * 1.8), new THREE.MeshBasicMaterial({color: INK.paper}));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.05;
   group.wave.add(floor);
   // A faint rim round the simulated region (the absorbing margin outside it is hidden).
   const x = (LX / 2 - ABSORB * DX) * S, z = (LY / 2 - ABSORB * DX) * S;
-  stage.line({color: 0x8fb3d4, width: 1.2, opacity: .35, parent: group.wave}).set([-x, .01, -z, x, .01, -z, x, .01, z, -x, .01, z, -x, .01, -z]);
+  stage.line({color: INK.olive, width: 1.4, opacity: .7, parent: group.wave}).set([-x, .01, -z, x, .01, -z, x, .01, z, -x, .01, z, -x, .01, -z]);
 }
 
 // ---------------------------------------------------------------- props: walls, barrier, energy line, detector screen
-const barrierMaterial = new THREE.MeshStandardMaterial({color: COLOR.barrier, transparent: true, opacity: .28, roughness: .2, metalness: .1, depthWrite: false});
+const barrierMaterial = new THREE.MeshStandardMaterial({color: COLOR.barrier, transparent: true, opacity: .6, roughness: .9, metalness: 0, depthWrite: false});
 const energyLine = stage.line({color: COLOR.energy, width: 2, opacity: .9, dashed: true, dash: [.18, .12], parent: group.props});
 const zMin = -(LY / 2 - ABSORB * DX) * S, zMax = -zMin;
 function box(x0, x1, y0, y1, h) {
@@ -165,12 +167,12 @@ function box(x0, x1, y0, y1, h) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(bx - ax), h, Math.abs(bz - az)), barrierMaterial);
   mesh.position.set((ax + bx) / 2, h / 2, (az + bz) / 2);
   group.props.add(mesh);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color: COLOR.barrier, transparent: true, opacity: .7}));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color: INK.olive, transparent: true, opacity: 1}));
   edges.position.copy(mesh.position);
   group.props.add(edges);
 }
 const screen = new THREE.Mesh(new THREE.PlaneGeometry(zMax - zMin, 1.9), new THREE.MeshStandardMaterial({
-  color: 0x0c1420, transparent: true, opacity: .85, side: THREE.DoubleSide, roughness: .9,
+  color: INK.paper2, transparent: true, opacity: .95, side: THREE.DoubleSide, roughness: .9,
 }));
 screen.rotation.y = Math.PI / 2;
 screen.position.set(DETECTOR_X * S + .02, .95, 0);
@@ -183,7 +185,7 @@ const dotMatrix = new THREE.Matrix4();
 let dotBudget = 0;
 // A running tally of arrivals along the screen, drawn on its face: the stripes show as bumps long before the dots alone make them obvious.
 const TALLY_BINS = 48, tally = new Float32Array(TALLY_BINS);
-const tallyLine = stage.line({color: 0xc9b8ff, width: 2.2, opacity: .95, parent: group.dots});
+const tallyLine = stage.line({color: INK.spot, width: 2.4, opacity: 1, parent: group.dots});
 function clearDots() { dots.count = 0; dots.instanceMatrix.needsUpdate = true; dotBudget = 0; tally.fill(0); tallyLine.set([]); }
 function drawTally() {
   // Lightly smoothed over neighbouring bins, so a handful of dots does not read as noise.
@@ -223,11 +225,11 @@ const dotTexture = (() => {
   return new THREE.CanvasTexture(c);
 })();
 const atomPoints = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
-  size: .085, map: dotTexture, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  size: .09, map: dotTexture, vertexColors: true, transparent: true, opacity: .9, depthWrite: false,
 }));
 group.atom.add(atomPoints);
-const nucleus = stage.sprite(0xffffff, .45, group.atom);
-const axis = stage.line({color: 0x9fb4cf, width: 1, opacity: .3, dashed: true, dash: [.15, .15], parent: group.atom});
+const nucleus = stage.sprite(INK.dark, .5, group.atom);
+const axis = stage.line({color: INK.grey, width: 1, opacity: .7, dashed: true, dash: [.15, .15], parent: group.atom});
 let atomInfo = null;
 function buildAtom() {
   const orb = q.orbital(settings.orbital), R = orb.extent, count = narrow() ? 16000 : 26000;
@@ -322,11 +324,11 @@ function simulate(dtFrame) {
 }
 
 // ---------------------------------------------------------------- measurement
-const flash = stage.sprite(0xffffff, 2, scene, {opacity: 0});
+const flash = stage.sprite(INK.spot, 2, scene, {opacity: 0});
 let found = null;   // where the last measurement found the particle, shown for a few seconds
 
 // The packet's spread: a bracket of ±1 standard deviation along x, riding above the wave.
-const spreadLine = stage.line({color: 0xdfe8f0, width: 1.8, opacity: .85, segments: true});
+const spreadLine = stage.line({color: INK.dark, width: 2, opacity: 1, segments: true});
 const spreadMid = new THREE.Vector3();
 let spreadShown = false;
 function updateSpread() {

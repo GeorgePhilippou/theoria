@@ -1,6 +1,6 @@
 // Light as a wave: a live Maxwell solver drawn as a glowing surface whose height is the electric field.
 import * as THREE from 'three';
-import {createStage, spectrumColor} from '../shared/stage.js';
+import {createStage, spectrumColor, INK} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as em from './physics.js';
 import {steps} from './story.js';
@@ -11,7 +11,8 @@ const CELL = .1;           // world size of one cell
 const W = N * CELL;        // world size of the grid
 const RAIL = 2.4;          // height of the arrow rail above the surface
 const ARROWS = 26;         // number of E/B arrow pairs
-const COLOR = {e: 0xffc56b, b: 0x7fe0f0, glass: 0xcfe6ff, metal: 0x2a3440};
+// Paper palette: crests burnt orange, troughs olive; E orange, B dark ink; glass an orange tint, metal dark ink.
+const COLOR = {e: INK.spot, b: INK.dark, glass: INK.spot, metal: INK.dark};
 const RATES = [.5, 1, 2, 3];
 // The grid is given a real scale: 25 nm per cell, so the waves are visible light (everything scales, see the notes).
 const NM_PER_CELL = 25, C_NM_THZ = 299792.458;   // c in nm × THz
@@ -31,7 +32,7 @@ let heightOn = 1, targetHeight = 1, intensityMix = 0, playing = !reducedMotion, 
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), bloom: {strength: .4, radius: .45, threshold: .8},
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     if (!narrow()) return [24, 0];
     const top = $('story').getBoundingClientRect().bottom;
@@ -130,28 +131,31 @@ const surfaceMaterial = new THREE.ShaderMaterial({
   fragmentShader: `
     uniform float mode, edge, fade; uniform vec3 light;
     varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying float vVal; varying float vInt; varying float vMat;
+    // Printed colours (sRGB): paper where the field is zero, burnt orange for crests, olive for troughs.
     vec3 diverging(float v) {
-      vec3 mid = vec3(0.035, 0.05, 0.085);
-      return v < 0.0 ? mix(mid, vec3(0.12, 0.36, 0.92), pow(-v, 0.8)) : mix(mid, vec3(0.92, 0.55, 0.2), pow(v, 0.8));
+      vec3 mid = vec3(0.93, 0.89, 0.82);
+      return v < 0.0 ? mix(mid, vec3(0.34, 0.38, 0.16), pow(-v, 0.8)) : mix(mid, vec3(0.78, 0.33, 0.12), pow(v, 0.8));
     }
+    // Brightness as ink density: paper where it is dark, through pale orange to deep burnt orange where it is brightest.
     vec3 heat(float x) {
-      vec3 c = mix(vec3(0.02, 0.02, 0.05), vec3(0.30, 0.12, 0.58), smoothstep(0.0, 0.35, x));
-      c = mix(c, vec3(0.98, 0.46, 0.34), smoothstep(0.3, 0.72, x));
-      return mix(c, vec3(1.0, 0.95, 0.82), smoothstep(0.72, 1.0, x));
+      vec3 c = mix(vec3(0.93, 0.89, 0.82), vec3(0.91, 0.65, 0.50), smoothstep(0.0, 0.4, x));
+      c = mix(c, vec3(0.78, 0.33, 0.12), smoothstep(0.35, 0.75, x));
+      return mix(c, vec3(0.40, 0.16, 0.06), smoothstep(0.75, 1.0, x));
     }
     void main() {
       float d = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
       float alpha = smoothstep(edge, edge + fade, d);
       if (alpha <= 0.0) discard;
-      vec3 base = mix(diverging(vVal), heat(vInt) * 0.8, mode);
+      vec3 base = mix(diverging(vVal), heat(vInt), mode);
       vec3 n = normalize(vNormal);
       vec3 l = normalize((viewMatrix * vec4(light, 0.0)).xyz);
       float diff = max(dot(n, l), 0.0);
       float spec = pow(max(dot(reflect(-l, n), vView), 0.0), 48.0);
-      vec3 color = base * (0.38 + 0.7 * diff) + spec * 0.28 * (1.0 - 0.6 * mode);
-      if (vMat > 0.3 && vMat < 0.7) color = mix(color, vec3(0.78, 0.9, 1.0), 0.1);
-      if (vMat > 0.9) color = vec3(0.05, 0.06, 0.08);
-      gl_FragColor = vec4(color, alpha);
+      vec3 color = base * (0.74 + 0.34 * diff) + spec * 0.06 * (1.0 - mode);
+      if (vMat > 0.3 && vMat < 0.7) color = mix(color, vec3(0.91, 0.65, 0.50), 0.22);
+      if (vMat > 0.9) color = vec3(0.18, 0.21, 0.08);
+      // Colours above are in display (sRGB) terms; convert to linear for the renderer.
+      gl_FragColor = vec4(pow(clamp(color, 0.0, 1.0), vec3(2.2)), alpha);
     }`,
 });
 const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
@@ -159,7 +163,7 @@ group.base.add(surface);
 // A dark floor under the surface, and a faint frame round the visible area.
 {
   const inner = (N - 2 * BORDER - 4) * CELL;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(inner * 1.6, inner * 1.6), new THREE.MeshBasicMaterial({color: 0x05080e}));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(inner * 1.6, inner * 1.6), new THREE.MeshBasicMaterial({color: INK.paper}));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -1.4;
   group.base.add(floor);
@@ -171,7 +175,7 @@ function buildProps() {
   if (settings.experiment === 'slits') {
     const {i, width, slit} = WALL, s1 = cy - settings.gap / 2, s2 = cy + settings.gap / 2;
     const spans = [[BORDER, s1 - slit / 2], [s1 + slit / 2, s2 - slit / 2], [s2 + slit / 2, N - BORDER]];
-    const material = new THREE.MeshStandardMaterial({color: COLOR.metal, metalness: .8, roughness: .35});
+    const material = new THREE.MeshStandardMaterial({color: COLOR.metal, metalness: 0, roughness: .9});
     for (const [a, b] of spans) {
       if (b <= a) continue;
       const [x] = cellToWorld(i + width / 2 - .5, 0), z1 = cellToWorld(0, a)[1], z2 = cellToWorld(0, b)[1];
@@ -191,11 +195,11 @@ function buildProps() {
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, -depth / 2, 0);
     group.props.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: COLOR.glass, transparent: true, opacity: .1, roughness: .05, metalness: .1, depthWrite: false,
+      color: INK.spotTint, transparent: true, opacity: .3, roughness: .9, metalness: 0, depthWrite: false,
     })));
     const ring = outline.flatMap(([i, j]) => { const [x, z] = cellToWorld(i, j); return [x, 0, z]; });
     for (const y of [-depth / 2, depth / 2]) {
-      const line = stage.line({color: COLOR.glass, width: 1.6, opacity: .55, parent: group.props});
+      const line = stage.line({color: COLOR.glass, width: 1.8, opacity: .9, parent: group.props});
       line.set([...ring, ...ring.slice(0, 3)].map((v, k) => k % 3 === 1 ? y : v));
     }
   }
@@ -203,20 +207,19 @@ function buildProps() {
 
 // ---------------------------------------------------------------- the source: an antenna, or an emitter along the left edge
 const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, 1.5, 16), new THREE.MeshStandardMaterial({
-  color: 0x3a3220, emissive: 0xffc56b, emissiveIntensity: .6, metalness: .6, roughness: .3,
+  color: INK.dark, emissive: INK.spot, emissiveIntensity: 0, metalness: 0, roughness: .8,
 }));
 antenna.position.set(...cellToWorld(N / 2, N / 2).flatMap((v, k) => k === 0 ? [v, .75] : [v]));
 group.source.add(antenna);
-const antennaGlow = stage.sprite(0xffd28a, 1.4, group.source);
+const antennaGlow = stage.sprite(INK.spot, 1.4, group.source);
 antennaGlow.position.set(antenna.position.x, 1.5, antenna.position.z);
-const emitter = stage.line({color: 0xffc56b, width: 3.2, additive: true, parent: group.source});
+const emitter = stage.line({color: INK.spot, width: 3.2, parent: group.source});
 function updateSource() {
   const antennaOn = settings.experiment === 'antenna';
   antenna.visible = antennaGlow.visible = antennaOn;
   const swing = Math.abs(Math.sin(em.omegaFor(settings.lambda) * field.t));
   antennaGlow.material.opacity = .35 + .65 * swing;
   antennaGlow.scale.setScalar(1 + .8 * swing);
-  antenna.material.emissiveIntensity = .3 + .9 * swing;
   if (antennaOn) { emitter.setVisible(false); return; }
   const [x] = cellToWorld(BORDER + 6, 0), z0 = cellToWorld(0, BORDER + 2)[1], z1 = cellToWorld(0, N - BORDER - 3)[1];
   emitter.setVisible(true);
@@ -237,12 +240,13 @@ screenTexture.magFilter = screenTexture.minFilter = THREE.LinearFilter;
   strip.position.set(x, .02, z);
   group.screen.add(strip);
 }
-const profile = stage.line({color: 0xffe2b8, width: 1.8, opacity: .75, parent: group.screen});
+const profile = stage.line({color: INK.dark, width: 2, opacity: .9, parent: group.screen});
 const screenLevels = new Float32Array(screenCount);
 let screenMax = 1e-9;
 const screenTop = new THREE.Vector3();
 function heatColor(u) {
-  const stops = [[.02, .02, .05], [.3, .12, .58], [.98, .46, .34], [1, .95, .82]], at = [0, .35, .72, 1];
+  // The same ink-density scale as the brightness map: paper, pale orange, burnt orange, deep orange.
+  const stops = [[.93, .89, .82], [.91, .65, .50], [.78, .33, .12], [.40, .16, .06]], at = [0, .4, .75, 1];
   let k = 0;
   while (k < 2 && u > at[k + 1]) k++;
   const f = Math.min(1, Math.max(0, (u - at[k]) / (at[k + 1] - at[k])));
@@ -276,8 +280,8 @@ const arrows = {
   b: stage.line({color: COLOR.b, width: 2.4, segments: true, parent: group.arrows}),
   eCurve: stage.line({color: COLOR.e, width: 1.6, opacity: .75, parent: group.arrows}),
   bCurve: stage.line({color: COLOR.b, width: 1.6, opacity: .75, parent: group.arrows}),
-  rail: stage.line({color: 0xb7c6d6, width: 1.2, opacity: .4, dashed: true, dash: [.12, .1], parent: group.arrows}),
-  drop: stage.line({color: 0xb7c6d6, width: 1, opacity: .25, dashed: true, dash: [.1, .1], segments: true, parent: group.arrows}),
+  rail: stage.line({color: INK.grey, width: 1.2, opacity: .8, dashed: true, dash: [.12, .1], parent: group.arrows}),
+  drop: stage.line({color: INK.grey, width: 1, opacity: .5, dashed: true, dash: [.1, .1], segments: true, parent: group.arrows}),
 };
 function heads(color) {
   const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(.055, .16, 12), new THREE.MeshBasicMaterial({color}), ARROWS);
@@ -330,10 +334,10 @@ function updateArrows() {
 }
 
 // The direction of travel, at the far end of the arrow line.
-const travel = new THREE.Mesh(new THREE.ConeGeometry(.1, .32, 16), new THREE.MeshBasicMaterial({color: 0xdfe8f0}));
+const travel = new THREE.Mesh(new THREE.ConeGeometry(.1, .32, 16), new THREE.MeshBasicMaterial({color: INK.dark}));
 travel.geometry.rotateZ(-Math.PI / 2);
 group.arrows.add(travel);
-const travelShaft = stage.line({color: 0xdfe8f0, width: 2, opacity: .8, parent: group.arrows});
+const travelShaft = stage.line({color: INK.dark, width: 2, opacity: 1, parent: group.arrows});
 const travelTip = new THREE.Vector3();
 function updateTravel() {
   const [xb] = cellToWorld(probe.i1, 0), z = cellToWorld(0, probe.j)[1];
@@ -346,8 +350,8 @@ function updateTravel() {
 // The bracket is fixed in space near the source and is exactly one wavelength long (easing when the frequency changes).
 // The two markers sit on the surface at its ends: once the new waves arrive, they rise and fall together.
 const RULER_H = 1.75;
-const ruler = stage.line({color: 0xffe2b8, width: 2, opacity: .9, segments: true, parent: group.ruler});
-const rulerEnds = [stage.sprite(0xffe2b8, .8, group.ruler), stage.sprite(0xffe2b8, .8, group.ruler)];
+const ruler = stage.line({color: INK.dark, width: 2, opacity: 1, segments: true, parent: group.ruler});
+const rulerEnds = [stage.sprite(INK.dark, .9, group.ruler), stage.sprite(INK.dark, .9, group.ruler)];
 const rulerMid = new THREE.Vector3();
 let rulerLen = settings.lambda, rulerOn = false;
 function fieldAt(i, j) {
@@ -444,8 +448,8 @@ function updateLegend() {
   $('legend-mid').textContent = bright ? '' : '0';
   $('legend-hi').textContent = bright ? 'bright' : 'E up';
   $('legend-caption').textContent = bright
-    ? 'Colour: brightness, the average of E² over the last few cycles. This is what a screen or an eye would register.'
-    : top ? 'Seen from above: colour is the electric field at this instant. Crests are amber, troughs blue.'
+    ? 'Colour: brightness, the average of E² over the last few cycles, printed as ink: the deeper the orange, the brighter the light.'
+    : top ? 'Seen from above: colour is the electric field at this instant. Crests are orange, troughs olive.'
       : 'Height and colour: the electric field at this instant. The wave moves; the pattern of crests is the light.';
 }
 const labelPoint = new THREE.Vector3();

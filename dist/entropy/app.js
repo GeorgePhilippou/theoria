@@ -1,6 +1,6 @@
 // Entropy and time's arrow: a live, exactly reversible gas of colliding atoms.
 import * as THREE from 'three';
-import {createStage} from '../shared/stage.js';
+import {createStage, INK} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as gasLib from './physics.js';
 import {steps} from './story.js';
@@ -11,7 +11,8 @@ const CELLS = {cols: 8, rows: 5};
 const NUDGE = 3;            // integer units, 3 × 10⁻⁷: about a millionth of an atom's width
 const TIME_RATE = 3;        // simulated time units per second at 1×
 const RATES = [.5, 1, 2, 4];
-const COLOR = {fwd: '#a9dfee', back: '#c9b8ff', max: '#8b9cae', left: 0xffb46b, right: 0x7fe0f0};
+// Paper palette: forwards olive, backwards burnt orange; atoms that start left orange, right olive.
+const COLOR = {fwd: '#56612a', back: '#c8541f', max: '#8a8c68', left: INK.spot, right: INK.olive};
 const HIST = {z: -BOX.h / 2 - 1.6, x0: -BOX.w / 2 + .6, x1: BOX.w / 2 - .6, height: 7};
 
 const settings = {experiment: 'spread', atoms: 400, rate: 1, nudge: false};
@@ -24,7 +25,7 @@ let latest = {total: 0, max: 0};
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), bloom: {strength: .45, radius: .5, threshold: .78},
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     // Desktop: move the box right, so the half where the gas starts is not under the tour card.
     if (!narrow()) return [Math.min(170, innerWidth * .11), 30];
@@ -45,11 +46,11 @@ floorTexture.magFilter = floorTexture.minFilter = THREE.NearestFilter;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(BOX.w, BOX.h), new THREE.MeshBasicMaterial({map: floorTexture}));
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshBasicMaterial({color: 0x05080e}));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshBasicMaterial({color: INK.paper}));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -.02;
   scene.add(ground);
-  const glass = new THREE.MeshStandardMaterial({color: 0xbfd8ee, transparent: true, opacity: .14, roughness: .1, metalness: .1, depthWrite: false});
+  const glass = new THREE.MeshStandardMaterial({color: INK.oliveTint, transparent: true, opacity: .45, roughness: .9, metalness: 0, depthWrite: false});
   const height = .55, t = .08;
   for (const [w, d, x, z] of [[BOX.w + 2 * t, t, 0, BOX.h / 2 + t / 2], [BOX.w + 2 * t, t, 0, -BOX.h / 2 - t / 2], [t, BOX.h, BOX.w / 2 + t / 2, 0], [t, BOX.h, -BOX.w / 2 - t / 2, 0]]) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), glass);
@@ -58,10 +59,10 @@ floorTexture.magFilter = floorTexture.minFilter = THREE.NearestFilter;
   }
   const X = BOX.w / 2, Z = BOX.h / 2, rim = [];
   for (const y of [0, height]) rim.push(-X, y, -Z, X, y, -Z, X, y, -Z, X, y, Z, X, y, Z, -X, y, Z, -X, y, Z, -X, y, -Z);
-  stage.line({color: 0xcfe6ff, width: 1.3, opacity: .45, segments: true}).set(rim);
+  stage.line({color: INK.olive, width: 1.6, opacity: 1, segments: true}).set(rim);
 }
 // Faint lines between the counting cells.
-const cellLines = stage.line({color: 0x8fb3d4, width: 1, opacity: .2, segments: true});
+const cellLines = stage.line({color: INK.olive, width: 1, opacity: .35, segments: true});
 {
   const flat = [];
   for (let c = 1; c < CELLS.cols; c++) { const x = -BOX.w / 2 + c * BOX.w / CELLS.cols; flat.push(x, .004, -BOX.h / 2, x, .004, BOX.h / 2); }
@@ -70,7 +71,7 @@ const cellLines = stage.line({color: 0x8fb3d4, width: 1, opacity: .2, segments: 
 }
 // The middle wall: down while the gas is confined, lifted (and faded) after.
 const partition = new THREE.Mesh(new THREE.BoxGeometry(.1, .8, BOX.h), new THREE.MeshStandardMaterial({
-  color: 0x9fd8ff, emissive: 0x3a7fb0, emissiveIntensity: .6, transparent: true, opacity: .6, roughness: .2,
+  color: INK.spot, transparent: true, opacity: .75, roughness: .9,
 }));
 scene.add(partition);
 let partitionLift = 0;
@@ -86,8 +87,8 @@ scene.add(atoms);
   const m = new THREE.Matrix4();
   for (let i = 0; i < MAX_ATOMS; i++) atoms.setMatrixAt(i, m);
 }
-const glow = stage.sprite(0xffffff, 1.1);
-const trail = stage.line({color: 0xffffff, width: 1.6, opacity: .7, additive: true});
+const glow = stage.sprite(INK.dark, 1.6);
+const trail = stage.line({color: INK.dark, width: 1.6, opacity: .8});
 const TRAIL = 360;
 let trailPoints = [];
 
@@ -95,7 +96,8 @@ const tmpColor = new THREE.Color();
 /** Blue (slow) through pale (typical) to amber (fast), by speed relative to the gas's temperature. */
 function speedColor(v, target = tmpColor) {
   const u = Math.min(1, v / (2.6 * Math.sqrt(kTref)));
-  const a = [.12, .3, 1], b = [.78, .86, 1], c = [1, .52, .14];
+  // Slow olive, typical khaki, fast burnt orange: cool to hot in the two inks.
+  const a = [.30, .35, .13], b = [.74, .69, .52], c = [.80, .32, .10];
   const [p, q, k] = u < .42 ? [a, b, u / .42] : [b, c, (u - .42) / .58];
   return target.setRGB(p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k, p[2] + (q[2] - p[2]) * k, THREE.SRGBColorSpace);
 }
@@ -140,7 +142,7 @@ function updateCells() {
     const r = Math.min(CELLS.rows - 1, Math.max(0, Math.floor(y / BOX.h * CELLS.rows)));
     counts[r * CELLS.cols + c]++;
   }
-  const data = floorTexture.image.data, base = [10, 15, 24], lit = [44, 82, 120];
+  const data = floorTexture.image.data, base = [236, 228, 210], lit = [170, 172, 120];
   // In the heat experiment the cells become a thermal map: each is tinted by its atoms' average energy (kT),
   // smoothed over a few frames, from blue (cold, kT = 0.25) to amber (hot, kT = 2).
   const thermal = settings.experiment === 'heat';
@@ -158,7 +160,7 @@ function updateCells() {
   for (let k = 0; k < counts.length; k++) {
     if (thermal && layers.cells) {
       const u = Math.min(1, Math.max(0, Math.log(cellT[k] / gasLib.COLD) / Math.log(gasLib.HOT / gasLib.COLD)));
-      const cold = [40, 80, 200], hot = [235, 140, 50];
+      const cold = [86, 97, 42], hot = [200, 84, 31];
       for (let j = 0; j < 3; j++) data[k * 4 + j] = base[j] + (cold[j] + (hot[j] - cold[j]) * u - base[j]) * .5;
     } else {
       const u = layers.cells ? Math.min(1, counts[k] / (2 * expect)) : 0;
@@ -173,12 +175,12 @@ function updateCells() {
 // ---------------------------------------------------------------- speed chart behind the box
 const histGroup = new THREE.Group();
 scene.add(histGroup);
-const bars = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({roughness: .5, emissive: 0x111822}), BINS);
+const bars = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({roughness: .9}), BINS);
 bars.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(BINS * 3), 3);
 bars.frustumCulled = false;
 histGroup.add(bars);
-const curve = stage.line({color: 0xffffff, width: 2.4, opacity: .9, parent: histGroup});
-const axis = stage.line({color: 0x8fb3d4, width: 1.2, opacity: .5, parent: histGroup});
+const curve = stage.line({color: INK.dark, width: 2.6, opacity: 1, parent: histGroup});
+const axis = stage.line({color: INK.olive, width: 1.4, opacity: .9, parent: histGroup});
 axis.set([HIST.x0, .01, HIST.z, HIST.x1, .01, HIST.z]);
 const histogram = new Float64Array(BINS), rawHistogram = new Float64Array(BINS);
 let histScale = 1, vmax = 4, mbOverlap = 0;
@@ -296,7 +298,7 @@ function drawChart() {
   const ceiling = Math.max(.05, latest.max - s0), tMax = Math.max(20, ...history.map(p => p.t)) * 1.04;
   const top = ceiling * 1.18, pad = 4;
   const X = t => pad + t / tMax * (w - 2 * pad), Y = s => h - pad - Math.max(-.05 * top, s) / top * (h - 2 * pad);
-  ctx.strokeStyle = 'rgba(255,255,255,.08)';
+  ctx.strokeStyle = 'rgba(86,97,42,.25)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(pad, Y(0)); ctx.lineTo(w - pad, Y(0)); ctx.stroke();
   ctx.setLineDash([3, 4]);

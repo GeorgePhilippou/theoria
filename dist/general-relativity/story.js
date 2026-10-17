@@ -1,6 +1,6 @@
 // Guided tour for curved spacetime. Each step sets the view and which layers are shown.
 const sw = color => `<i class="swatch" style="--c:${color}"></i>`;
-export const SWATCH = {a: '#f0bd86', b: '#9fe3ef', c: '#f4a3c8', escape: '#cdefff', capture: '#ff9b73', photon: '#c9b8ff'};
+export const SWATCH = {a: '#c8541f', b: '#56612a', c: '#2f3614', escape: '#56612a', capture: '#c8541f', photon: '#2f3614'};
 
 export const steps = [
   {
@@ -15,7 +15,7 @@ export const steps = [
     title: 'Light climbs out stretched.',
     body: `<p>Clock A now sends a flash of light every two of its ticks. The flashes reach B <b>further apart</b> than they were sent.</p>
       <p>The light’s waves stretch the same way, so it arrives redder. This <b>gravitational redshift</b> is the slowing of time, seen through light.</p>`,
-    notice: 'Each flash shifts from blue towards yellow as it climbs.',
+    notice: 'Each flash shifts from blue towards yellow as it climbs: the colour is the light’s real wavelength.',
     maths: 'λ<sub>B</sub> / λ<sub>A</sub> = √(1 − rₛ/r<sub>B</sub>) / √(1 − rₛ/r<sub>A</sub>)',
     view: 'space', layers: {clocks: true, signals: true},
   },
@@ -23,7 +23,7 @@ export const steps = [
     title: 'Light follows curved spacetime.',
     body: `<p>Parallel rays of light arrive from far away. Each one travels as straight as spacetime allows, and near the mass that path bends.</p>
       <p>Aim inside a sharp threshold and the light is <b>captured</b> ${sw(SWATCH.capture)}. Just outside it, light can <b>circle the photon sphere</b> ${sw(SWATCH.photon)} before escaping.</p>`,
-    notice: 'The violet ray loops around the dashed photon sphere before it escapes.',
+    notice: 'The dark ray loops around the dashed photon sphere before it escapes.',
     maths: 'capture if impact parameter b < 3√3/2 · rₛ ≈ 2.6 rₛ',
     view: 'space', camera: 'close', isco: false, layers: {light: true, landmarks: true},
   },

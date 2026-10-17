@@ -4,7 +4,7 @@ const sw = color => `<i class="swatch" style="--c:${color}"></i>`;
 export const steps = [
   {
     title: 'Light slows down in glass.',
-    body: `<p>A beam of light ${sw('#ffe2a8')} crosses a block of glass. Each glowing dot is a pulse of light, and the pulses in a row left together.</p>
+    body: `<p>A beam of light ${sw('#3b4419')} crosses a block of glass. Each glowing dot is a pulse of light, and the pulses in a row left together.</p>
       <p>Inside the glass they travel at <b>c / n</b>, about two-thirds of their speed in air, so they bunch up. The row of pulses, a <b>wavefront</b>, enters at a slant: one end slows first, and the whole front swings round. That is why the beam bends.</p>`,
     notice: 'The wavefronts tilt as they enter the glass, and straighten as they leave. The beam comes out parallel to how it went in.',
     maths: 'speed in glass v = c / n',

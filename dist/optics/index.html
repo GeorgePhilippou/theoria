@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b12">
+<meta name="theme-color" content="#ece4d2">
 <meta name="description" content="Exact ray tracing through glass: watch light slow down, bend by Snell's law, get trapped in a fibre, focus through a lens and split into a spectrum.">
 <title>Rays and Lenses · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body class="v2">
+<body class="v2 riso">
 <main class="stage" aria-label="Rays and lenses experiment">
   <canvas id="scene" aria-label="3D view of light rays passing through glass on an optical bench"></canvas>
 
@@ -45,18 +45,18 @@
   </div>
 
   <section class="readout glass" id="readout" aria-label="Measurements">
-    <div class="readout-row"><i class="swatch" style="--c:#ffe2a8"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1" class="text-value"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#9fd8ff"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2" class="text-value"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#c9b8ff"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3" class="text-value"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#3b4419"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1" class="text-value"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2" class="text-value"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#8a8c68"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3" class="text-value"></strong></div>
   </section>
 
   <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
     <span class="eyebrow">Show</span>
     <div class="chips">
-      <button class="chip" data-layer="pulses" aria-pressed="false"><i class="swatch" style="--c:#fff3c4"></i>Pulses of light</button>
-      <button class="chip" data-layer="wavefronts" aria-pressed="false"><i class="swatch" style="--c:#9fd8ff"></i>Wavefronts</button>
-      <button class="chip" data-layer="reflections" aria-pressed="false"><i class="swatch" style="--c:#8b9cae"></i>Partial reflections</button>
-      <button class="chip" data-layer="angles" aria-pressed="false"><i class="swatch" style="--c:#c9b8ff"></i>Normals and angles</button>
+      <button class="chip" data-layer="pulses" aria-pressed="false"><i class="swatch" style="--c:#3b4419"></i>Pulses of light</button>
+      <button class="chip" data-layer="wavefronts" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Wavefronts</button>
+      <button class="chip" data-layer="reflections" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Partial reflections</button>
+      <button class="chip" data-layer="angles" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>Normals and angles</button>
     </div>
     <details class="settings" open>
       <summary>Settings</summary>
@@ -116,7 +116,7 @@
     <h3>Touch and keys</h3>
     <p>Drag to orbit, pinch or scroll to zoom. Keys: Space pause, 1–5 experiments, T Bench/Top.</p>
 
-    <p class="honest">Drawn for clarity: the thickness of the glass blocks, the glow of rays and pulses, the pulse spacing and the speed of the animation (real light would cross the bench in about a nanosecond). The optics are two-dimensional (a slice through the middle of each element), so they show exactly how rays bend but not effects of the third dimension. Diffraction and interference, the wave side of light, are on the Light as a wave page.</p>
+    <p class="honest">Drawn for clarity: the thickness of the glass blocks, the printed look of rays and pulses, the pulse spacing and the speed of the animation (real light would cross the bench in about a nanosecond). The optics are two-dimensional (a slice through the middle of each element), so they show exactly how rays bend but not effects of the third dimension. Diffraction and interference, the wave side of light, are on the Light as a wave page.</p>
 
     <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/I_26.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 26</a> · Hecht, <em>Optics</em></p>
     <span class="version">Theoria · Rays and lenses 0.1 · Exact 2D ray tracing</span>

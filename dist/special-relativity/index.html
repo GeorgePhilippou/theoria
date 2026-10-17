@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b12">
+<meta name="theme-color" content="#ece4d2">
 <meta name="description" content="An interactive, exact look at moving clocks, the relativity of simultaneity, length contraction and the twin paradox.">
 <title>Special Relativity · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body class="v2">
+<body class="v2 riso">
 <main class="stage" aria-label="Special relativity experiment">
   <canvas id="scene" aria-label="Rotatable 3D view of space and time for a moving ship and Earth"></canvas>
 
@@ -33,11 +33,11 @@
   <section class="story glass" id="story" aria-live="polite"></section>
 
   <div class="labels" aria-hidden="true">
-    <div class="scene-label" id="label-earth"><div class="tag"><span class="name"><i class="swatch" style="--c:#f0bd86"></i>Earth</span></div></div>
-    <div class="scene-label" id="label-ship"><div class="tag"><span class="name"><i class="swatch" style="--c:#9fe3ef"></i>Ship</span></div></div>
+    <div class="scene-label" id="label-earth"><div class="tag"><span class="name"><i class="swatch" style="--c:#c8541f"></i>Earth</span></div></div>
+    <div class="scene-label" id="label-ship"><div class="tag"><span class="name"><i class="swatch" style="--c:#56612a"></i>Ship</span></div></div>
     <div class="scene-label landmark" id="label-cone"><div class="tag"><span class="name">Light cone</span></div></div>
-    <div class="scene-label landmark" id="label-cut-earth"><div class="tag"><span class="name" id="label-cut-earth-text" style="color:#f0bd86"></span></div></div>
-    <div class="scene-label landmark" id="label-cut-ship"><div class="tag"><span class="name" id="label-cut-ship-text" style="color:#9fe3ef"></span></div></div>
+    <div class="scene-label landmark" id="label-cut-earth"><div class="tag"><span class="name" id="label-cut-earth-text" style="color:#c8541f"></span></div></div>
+    <div class="scene-label landmark" id="label-cut-ship"><div class="tag"><span class="name" id="label-cut-ship-text" style="color:#56612a"></span></div></div>
     <div class="scene-label landmark" id="label-back"><div class="tag"><span class="name" id="label-back-text"></span></div></div>
     <div class="scene-label landmark" id="label-front"><div class="tag"><span class="name" id="label-front-text"></span></div></div>
     <div id="dynamic-labels"></div>
@@ -45,21 +45,21 @@
 
   <section class="readout glass" id="readout" aria-label="Readings in the chosen frame">
     <div class="readout-row">
-      <i class="swatch" style="--c:#f0bd86"></i>
+      <i class="swatch" style="--c:#c8541f"></i>
       <span class="who">Earth’s clock<small id="earth-where"></small></span>
       <strong id="earth-tau"></strong>
       <span class="sub" id="earth-sub" hidden></span>
-      <span class="bar"><i id="bar-earth" style="--c:#f0bd86"></i></span>
+      <span class="bar"><i id="bar-earth" style="--c:#c8541f"></i></span>
     </div>
     <div class="readout-row">
-      <i class="swatch" style="--c:#9fe3ef"></i>
+      <i class="swatch" style="--c:#56612a"></i>
       <span class="who">Ship’s clock<small id="ship-where"></small></span>
       <strong id="ship-tau"></strong>
       <span class="sub" id="ship-sub"></span>
-      <span class="bar"><i id="bar-ship" style="--c:#9fe3ef"></i></span>
+      <span class="bar"><i id="bar-ship" style="--c:#56612a"></i></span>
     </div>
     <div class="readout-row" id="row-flash">
-      <i class="swatch" style="--c:#c9b8ff"></i>
+      <i class="swatch" style="--c:#2f3614"></i>
       <span class="who">Flash<small>in this frame</small></span>
       <strong id="flash-gap" class="text-value"></strong>
       <span class="sub" id="flash-sub"></span>
@@ -69,10 +69,10 @@
   <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
     <span class="eyebrow">Show</span>
     <div class="chips">
-      <button class="chip" data-layer="clock" aria-pressed="false"><i class="swatch" style="--c:#fff3c4"></i>Light clock</button>
-      <button class="chip" data-layer="flash" aria-pressed="false"><i class="swatch" style="--c:#c9b8ff"></i>Flash</button>
-      <button class="chip" data-layer="simultaneity" aria-pressed="false"><i class="swatch" style="--c:#9fe3ef"></i>“Now” sheets</button>
-      <button class="chip" data-layer="invariants" aria-pressed="false"><i class="swatch" style="--c:#d8e2ea"></i>Light cone &amp; invariants</button>
+      <button class="chip" data-layer="clock" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Light clock</button>
+      <button class="chip" data-layer="flash" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Flash</button>
+      <button class="chip" data-layer="simultaneity" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>“Now” sheets</button>
+      <button class="chip" data-layer="invariants" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Light cone &amp; invariants</button>
     </div>
     <details class="settings">
       <summary>Settings</summary>

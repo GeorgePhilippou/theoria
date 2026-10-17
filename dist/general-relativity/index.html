@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b12">
+<meta name="theme-color" content="#ece4d2">
 <meta name="description" content="An interactive, scientifically exact look at how gravity bends light and slows time near a black hole.">
 <title>Curved Spacetime · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="../shared/shell.css">
 <script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
 </head>
-<body class="v2">
+<body class="v2 riso">
 <main class="stage" aria-label="Curved spacetime experiment">
   <canvas id="scene" aria-label="Rotatable 3D view of space and time around a black hole"></canvas>
 
@@ -33,9 +33,9 @@
   <section class="story glass" id="story" aria-live="polite"></section>
 
   <div class="labels" aria-hidden="true">
-    <div class="scene-label" id="label-a"><div class="tag"><span class="name"><i class="swatch" style="--c:#f0bd86"></i>A</span><span class="detail" id="label-a-tau"></span></div></div>
-    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#9fe3ef"></i>B</span><span class="detail" id="label-b-tau"></span></div></div>
-    <div class="scene-label" id="label-c"><div class="tag"><span class="name"><i class="swatch" style="--c:#f4a3c8"></i>C</span><span class="detail" id="label-c-tau"></span></div></div>
+    <div class="scene-label" id="label-a"><div class="tag"><span class="name"><i class="swatch" style="--c:#c8541f"></i>A</span><span class="detail" id="label-a-tau"></span></div></div>
+    <div class="scene-label" id="label-b"><div class="tag"><span class="name"><i class="swatch" style="--c:#56612a"></i>B</span><span class="detail" id="label-b-tau"></span></div></div>
+    <div class="scene-label" id="label-c"><div class="tag"><span class="name"><i class="swatch" style="--c:#2f3614"></i>C</span><span class="detail" id="label-c-tau"></span></div></div>
     <div class="scene-label landmark" id="label-horizon"><div class="tag"><span class="name" id="label-horizon-text">Event horizon · 1 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-photon"><div class="tag"><span class="name">Photon sphere · 1.5 rₛ</span></div></div>
     <div class="scene-label landmark" id="label-isco"><div class="tag"><span class="name">Innermost stable orbit · 3 rₛ</span></div></div>
@@ -44,46 +44,46 @@
 
   <section class="readout glass" id="readout" aria-label="Clock readings">
     <div class="readout-row" id="row-far">
-      <i class="swatch" style="--c:#d8e2ea"></i>
+      <i class="swatch" style="--c:#8a8c68"></i>
       <span class="who">Far-away clock<small>the reference</small></span>
       <strong id="far-tau"></strong>
-      <span class="bar"><i id="bar-far" style="--c:#d8e2ea"></i></span>
+      <span class="bar"><i id="bar-far" style="--c:#8a8c68"></i></span>
     </div>
     <div class="readout-row" id="row-a">
-      <i class="swatch" style="--c:#f0bd86"></i>
+      <i class="swatch" style="--c:#c8541f"></i>
       <span class="who">Clock A<small id="a-where"></small></span>
       <strong id="a-tau"></strong>
       <span class="sub" id="a-sub"></span>
-      <span class="bar"><i id="bar-a" style="--c:#f0bd86"></i></span>
+      <span class="bar"><i id="bar-a" style="--c:#c8541f"></i></span>
     </div>
     <div class="readout-row" id="row-b">
-      <i class="swatch" style="--c:#9fe3ef"></i>
+      <i class="swatch" style="--c:#56612a"></i>
       <span class="who">Clock B<small id="b-where"></small></span>
       <strong id="b-tau"></strong>
       <span class="sub" id="b-sub"></span>
-      <span class="bar"><i id="bar-b" style="--c:#9fe3ef"></i></span>
+      <span class="bar"><i id="bar-b" style="--c:#56612a"></i></span>
     </div>
     <div class="readout-row" id="row-c">
-      <i class="swatch" style="--c:#f4a3c8"></i>
+      <i class="swatch" style="--c:#2f3614"></i>
       <span class="who">Clock C<small id="c-where"></small></span>
       <strong id="c-tau"></strong>
       <span class="sub" id="c-sub"></span>
-      <span class="bar"><i id="bar-c" style="--c:#f4a3c8"></i></span>
+      <span class="bar"><i id="bar-c" style="--c:#2f3614"></i></span>
     </div>
   </section>
 
   <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
     <span class="eyebrow">Show</span>
     <div class="chips">
-      <button class="chip" data-layer="clocks" aria-pressed="false"><i class="swatch" style="--c:#f0bd86"></i>Clocks</button>
-      <button class="chip" data-layer="signals" aria-pressed="false"><i class="swatch" style="--c:#6fa8ff"></i>Signals</button>
-      <button class="chip" data-layer="light" aria-pressed="false"><i class="swatch" style="--c:#cdefff"></i>Light rays</button>
-      <button class="chip" data-layer="falling" aria-pressed="false"><i class="swatch" style="--c:#f4a3c8"></i>Falling clock</button>
-      <button class="chip" data-layer="landmarks" aria-pressed="false"><i class="swatch" style="--c:#c9b8ff"></i>Landmarks</button>
+      <button class="chip" data-layer="clocks" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Clocks</button>
+      <button class="chip" data-layer="signals" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Signals</button>
+      <button class="chip" data-layer="light" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>Light rays</button>
+      <button class="chip" data-layer="falling" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Falling clock</button>
+      <button class="chip" data-layer="landmarks" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Landmarks</button>
     </div>
     <details class="settings">
       <summary>Settings</summary>
-      <label><span><i class="swatch" style="--c:#9fe3ef"></i>Clock B height <output id="out-b"></output></span>
+      <label><span><i class="swatch" style="--c:#56612a"></i>Clock B height <output id="out-b"></output></span>
         <input id="radius-b" type="range" min="1.2" max="11" step="0.1" value="8" aria-label="Clock B radius"></label>
       <p class="hint">Heights are distances from the centre in Schwarzschild radii (rₛ). Changes apply immediately.</p>
     </details>
@@ -136,7 +136,7 @@
     <p>Flashes travel radially from A to B along exact null paths, r + ln(r/rₛ − 1) = ±ct + const. Because the spacetime does not change with t, every flash takes the same coordinate time, so the spacing in B’s own time is stretched by √(1 − rₛ/r<sub>B</sub>) / √(1 − rₛ/r<sub>A</sub>). This is gravitational redshift: the same factor multiplies the wavelength, measured by clocks at rest at each height. Emitted light is set to 470 nm.</p>
 
     <h3>Light rays</h3>
-    <p>Null geodesics integrated numerically (fourth-order Runge–Kutta, checked against the conserved null constraint and against the known deflection series). Rays with impact parameter below 3√3/2 rₛ are captured; the bright violet ray starts just above it and orbits near the photon sphere at 1.5 rₛ.</p>
+    <p>Null geodesics integrated numerically (fourth-order Runge–Kutta, checked against the conserved null constraint and against the known deflection series). Rays with impact parameter below 3√3/2 rₛ are captured; the dark ray starts just above it and orbits near the photon sphere at 1.5 rₛ.</p>
 
     <h3>Falling clock C</h3>
     <p>Dropped from rest at radius R, it follows the exact radial geodesic r = R/2 (1 + cos η), τ = R<sup>3/2</sup>/2 (η + sin η). Its own time to reach the horizon is finite (22.4 rₛ/c from 6 rₛ), and to reach the centre only 0.7 more. In far-away time t it approaches the horizon forever and is never seen to cross.</p>
@@ -150,7 +150,7 @@
     <h3>Touch and keys</h3>
     <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash to see when and where it happened. Keys: Space play/pause, ← → step, T Space/Time, R replay.</p>
 
-    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each hand turns once per unit of that clock’s own time), the black sphere marking the horizon, glows, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
+    <p class="honest">Drawn for clarity rather than to scale: the clocks’ size and shape (each hand turns once per unit of that clock’s own time), the solid ball marking the horizon, the printed look of lines and dots, line brightness, the star background (not a real sky), and the colours of light (the redshift factor is exact; mapping a wavelength to a screen colour is approximate). Light rays are drawn on the spatial surface rather than as images a camera would see. Rotation (Kerr), charge and the inside of the horizon are not modelled.</p>
 
     <p>Further reading: <a href="https://jila.colorado.edu/~ajsh/astr3740_17/grbook.pdf" target="_blank" rel="noopener">Hamilton · General Relativity, Black Holes and Cosmology</a> · <a href="https://www.einstein-online.info/en/spacetime/" target="_blank" rel="noopener">Einstein Online · Spacetime</a></p>
     <span class="version">Theoria · General relativity 0.4 · Schwarzschild exterior</span>

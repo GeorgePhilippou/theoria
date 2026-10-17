@@ -1,6 +1,6 @@
 // Rays and lenses: exact ray tracing on an optical bench, with pulses that slow down in glass.
 import * as THREE from 'three';
-import {createStage, spectrumColor} from '../shared/stage.js';
+import {createStage, spectrumColor, dotTexture, PAPER} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys} from '../shared/shell.js';
 import * as op from './physics.js';
 import {steps} from './story.js';
@@ -11,7 +11,9 @@ const GLASS_H = 1;             // drawn thickness of the glass
 const PULSE_GAP = 3.2;         // optical path between pulses, cm
 const RATES = [.5, 1, 2, 4];
 const SPEED = 6;               // cm of light-travel per second at 1×
-const MONO = new THREE.Color(0xffe2a8);
+// Two inks on paper: olive for lines, burnt orange as the second ink. Spectral colours appear only where colour is the physics.
+const INK = {olive: 0x56612a, dark: 0x3b4419, spot: 0xc8541f, tint: 0xc9c9a3, paper: PAPER};
+const MONO = new THREE.Color(INK.dark), PAPER_COLOR = new THREE.Color(INK.paper);
 const SPECTRUM = [410, 450, 490, 530, 570, 610, 660];
 const DEG = Math.PI / 180;
 
@@ -32,7 +34,7 @@ const VIEW = {slab: [0, 24, 0], refract: [0, 19, -3], fibre: [0, 22, 0], lens: [
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), bloom: {strength: .35, radius: .4, threshold: .72},
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     if (!narrow()) return [Math.min(150, innerWidth * .1), 20];
     const top = $('story').getBoundingClientRect().bottom;
@@ -48,19 +50,20 @@ for (const g of Object.values(group)) scene.add(g);
 
 // ---------------------------------------------------------------- the bench
 {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({color: 0x070b12}));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({color: INK.paper}));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.01;
   scene.add(floor);
   const minor = [], major = [];
   for (let x = -40; x <= 40; x += 2) (x % 10 ? minor : major).push(x * K, 0, 16 * K, x * K, 0, -16 * K);
   for (let y = -16; y <= 16; y += 2) (y % 10 ? minor : major).push(-40 * K, 0, -y * K, 40 * K, 0, -y * K);
-  stage.line({color: 0x6f8ca6, width: 1, opacity: .1, segments: true}).set(minor);
-  stage.line({color: 0x6f8ca6, width: 1, opacity: .22, segments: true}).set(major);
+  stage.line({color: INK.olive, width: 1, opacity: .12, segments: true}).set(minor);
+  stage.line({color: INK.olive, width: 1, opacity: .3, segments: true}).set(major);
 }
 
 // ---------------------------------------------------------------- glass
-const glassMaterial = new THREE.MeshStandardMaterial({color: 0xbfe3ff, transparent: true, opacity: .16, roughness: .05, metalness: .1, depthWrite: false, side: THREE.DoubleSide});
+// Glass is printed as a flat overprint of the second ink.
+const glassMaterial = new THREE.MeshBasicMaterial({color: 0xe7a57f, transparent: true, opacity: .55, depthWrite: false, side: THREE.DoubleSide});
 function buildGlass(elements) {
   for (const child of [...group.glass.children]) { group.glass.remove(child); child.geometry?.dispose(); }
   for (const element of elements) {
@@ -74,7 +77,7 @@ function buildGlass(elements) {
     glassEdges[1].set(ring.flatMap(([x, y]) => W(x, y, GLASS_H).toArray()));
   }
 }
-const glassEdges = [stage.line({color: 0xcfe6ff, width: 1.4, opacity: .35}), stage.line({color: 0xcfe6ff, width: 1.4, opacity: .7})];
+const glassEdges = [stage.line({color: INK.spot, width: 1.4, opacity: .6}), stage.line({color: INK.spot, width: 2, opacity: 1})];
 
 // ---------------------------------------------------------------- experiments
 let scene2d = null, glassKey = null;    // the traced scene: {elements, rays: [{start, dir, nm}], ...}
@@ -144,38 +147,40 @@ function build() {
 }
 
 // ---------------------------------------------------------------- rays
-const rayLines = stage.line({width: 1.7, segments: true, vertexColors: true, additive: true, parent: group.rays});
+// Rays in olive ink, with a slightly offset burnt-orange pass under them, like a two-colour print out of register.
+// Fainter (partially reflected) light is printed paler: its ink is mixed towards the paper.
+const rayLines = stage.line({width: 2, segments: true, vertexColors: true, parent: group.rays});
+const rayEcho = stage.line({color: INK.spot, width: 1.1, opacity: .85, segments: true, parent: group.rays});
+const mixed = new THREE.Color();
 function drawRays() {
-  const flat = [], colors = [];
+  const flat = [], colors = [], echo = [], shift = [.07, 0, .07];
   for (const ray of scene2d.rays) for (const g of ray.segments) {
     if (g.depth > 0 && !layers.reflections) continue;
-    const k = (g.depth ? .2 + .5 * Math.sqrt(g.weight) : .3 + .25 * g.weight) * (scene2d.name === 'prism' ? 1.6 : 1);
-    flat.push(...W(...g.a).toArray(), ...W(...g.b).toArray());
-    for (let j = 0; j < 2; j++) colors.push(ray.color.r * k, ray.color.g * k, ray.color.b * k);
+    const strength = g.depth ? .25 + .55 * Math.sqrt(g.weight) : .7 + .3 * g.weight;
+    const a = W(...g.a).toArray(), b = W(...g.b).toArray();
+    flat.push(...a, ...b);
+    // White light before the prism is printed in ink: on paper, overlapping colours cannot add up to white.
+    const before = ray.nm && g.depth === 0 && g.t0 === 0;
+    mixed.copy(PAPER_COLOR).lerp(before ? MONO : ray.color, strength);
+    for (let j = 0; j < 2; j++) colors.push(mixed.r, mixed.g, mixed.b);
+    if (!ray.nm && g.depth === 0) echo.push(...a.map((v, k) => v + shift[k]), ...b.map((v, k) => v + shift[k]));
   }
   rayLines.set(flat, colors);
+  rayEcho.set(echo);
 }
 
-// Pulses: glowing points travelling along each ray at c/n, a train spaced PULSE_GAP of light-travel apart.
-const glowTexture = (() => {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d'), g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.2, 'rgba(255,255,255,.85)'); g.addColorStop(.5, 'rgba(255,255,255,.2)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
-})();
+// Pulses: printed dots travelling along each ray at c/n, a train spaced PULSE_GAP of light-travel apart.
 const MAX_PULSES = 600;
 const pulseGeometry = new THREE.BufferGeometry();
 pulseGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_PULSES * 3), 3));
 pulseGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_PULSES * 3), 3));
 const pulses = new THREE.Points(pulseGeometry, new THREE.PointsMaterial({
-  map: glowTexture, size: .5, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  map: dotTexture(), size: .5, vertexColors: true, transparent: true, depthWrite: false, alphaTest: .5,
 }));
 pulses.frustumCulled = false;
 group.rays.add(pulses);
-const wavefrontLines = stage.line({color: 0x7fb8e8, width: 1.6, opacity: .6, segments: true, parent: group.rays});
+const pulseInk = new THREE.Color(INK.dark);   // dark ink dots read on paper and on the orange glass alike
+const wavefrontLines = stage.line({color: INK.spot, width: 1.6, opacity: .9, segments: true, parent: group.rays});
 const wavefrontLabelAt = new THREE.Vector3();
 let wavefrontShown = false;
 
@@ -192,7 +197,8 @@ function updatePulses() {
       row[k] = p;
       if (!p || count >= MAX_PULSES || !layers.pulses) continue;
       W(...p, RAY_H + .02).toArray(pos, count * 3);
-      col[count * 3] = ray.color.r; col[count * 3 + 1] = ray.color.g; col[count * 3 + 2] = ray.color.b;
+      const c = ray.nm ? ray.color : pulseInk;
+      col[count * 3] = c.r; col[count * 3 + 1] = c.g; col[count * 3 + 2] = c.b;
       count++;
     }
     rows.push(row);
@@ -217,13 +223,13 @@ function updatePulses() {
 }
 
 // ---------------------------------------------------------------- props: normals, angles, object and image, screen
-const normalLine = stage.line({color: 0xc9b8ff, width: 1.4, opacity: .7, dashed: true, dash: [.2, .14], parent: group.angles});
-const angleArcs = stage.line({color: 0xc9b8ff, width: 1.6, opacity: .9, segments: true, parent: group.angles});
-const objectArrow = stage.line({color: 0xffe2a8, width: 3, segments: true, parent: group.props});
-const imageArrow = stage.line({color: 0x9fd8ff, width: 3, opacity: .9, dashed: true, dash: [.15, .1], segments: true, parent: group.props});
-const focusMark = stage.sprite(0xffffff, 1.2, group.props);
-const screenLine = stage.line({color: 0xd8e2ea, width: 2.4, opacity: .7, parent: group.props});
-const screenDots = stage.line({width: 6, segments: true, vertexColors: true, additive: true, parent: group.props});
+const normalLine = stage.line({color: INK.olive, width: 1.4, opacity: .9, dashed: true, dash: [.2, .14], parent: group.angles});
+const angleArcs = stage.line({color: INK.spot, width: 2, opacity: 1, segments: true, parent: group.angles});
+const objectArrow = stage.line({color: INK.dark, width: 3.5, segments: true, parent: group.props});
+const imageArrow = stage.line({color: INK.spot, width: 3.5, opacity: 1, dashed: true, dash: [.15, .1], segments: true, parent: group.props});
+const focusMark = stage.sprite(INK.spot, 1.6, group.props);
+const screenLine = stage.line({color: INK.dark, width: 3, opacity: 1, parent: group.props});
+const screenDots = stage.line({width: 6, segments: true, vertexColors: true, parent: group.props});
 const at = {a1: new THREE.Vector3(), a2: new THREE.Vector3(), focus: new THREE.Vector3(), object: new THREE.Vector3(), image: new THREE.Vector3(), glass: new THREE.Vector3(), screen: new THREE.Vector3(), normal: new THREE.Vector3()};
 const results = {};
 

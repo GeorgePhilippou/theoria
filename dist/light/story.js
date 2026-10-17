@@ -1,6 +1,6 @@
 // Guided tour for light as a wave. Each step picks an experiment, a view and the layers.
 const sw = color => `<i class="swatch" style="--c:${color}"></i>`;
-export const SWATCH = {up: '#ffa848', down: '#3a85ff', e: '#ffc56b', b: '#7fe0f0', glass: '#cfe6ff'};
+export const SWATCH = {up: '#c8541f', down: '#56612a', e: '#c8541f', b: '#2f3614', glass: '#e7a57f'};
 
 export const steps = [
   {
@@ -15,7 +15,7 @@ export const steps = [
     title: 'Electric and magnetic, together.',
     body: `<p>Far from its source, light becomes a straight-fronted wave. The arrows sample it along one line: ${sw(SWATCH.e)} the <b>electric</b> field points up and down, ${sw(SWATCH.b)} the <b>magnetic</b> field side to side.</p>
       <p>They rise and fall together, at right angles to each other and to the direction of travel. A changing electric field makes a magnetic one, and a changing magnetic field makes an electric one. That is what keeps light going.</p>`,
-    notice: 'The readout measures E / cB from the simulation: it stays at 1. The white arrow marks the direction of travel.',
+    notice: 'The readout measures E / cB from the simulation: it stays at 1. The dark arrow marks the direction of travel.',
     maths: 'E = c B,  E ⟂ B ⟂ direction of travel',
     experiment: 'plane', view: 'surface', layers: {arrows: true, ruler: true},
   },

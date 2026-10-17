@@ -119,3 +119,10 @@
 - `npm test`: 7 optics tests pass (43 in total). Snell's law holds to 1e-12; Fresnel reflectance is 4.0% at normal incidence; the critical angle for n = 1.5 is 41.81°; paraxial rays focus within 0.5% of the lensmaker's back focal distance; prism minimum deviation recovers n = 1.5 to 2e-4; the crown-glass model has an Abbe number near 64.
 - In the app: θ₁ = 25° gives θ₂ = 39.3° (n sin θ = 0.634 on both sides) with 4.5% reflected; at 50° the light is totally reflected; the fibre makes 5 bounces at 78° to the wall. The lens (f = 10.6 cm) images an object at 26 cm at 18.1 cm, against 18.6 cm for an ideal lens (the difference is spherical aberration, stated in the readout). The flint prism spreads 410–660 nm over 4.1°.
 - Checked in the in-app browser at 1440×900 and 375×812, with no console errors.
+
+# Paper (risograph) theme across the site (17 Oct 2026)
+
+- All six concept pages and the home page now use the printed look chosen by the user: oat paper, olive and burnt-orange inks with their tints, a dark olive for black, Space Mono (self-hosted, OFL) for labels and numbers, square ink-ruled panels, a faint print grain, and no glow, bloom, blur or star sky.
+- The shared stage has a paper mode: paper background and fog, no bloom pass or sky, sprites printed as solid dots, and lines always drawn with normal blending (ink does not add up like light). A shared inkFade() prints faded lines towards the paper rather than towards black.
+- Colour that is itself the physics keeps real colour: redshifted flashes (curved spacetime), the wavelength swatch and spectrum (light, optics), quantum phase. On paper, white light before the prism is printed in ink, since overlapping colours cannot add to white.
+- Each page was checked at desktop size (800×600 and 1440×900) and on a phone (375×812), with no console errors from the pages. All 43 tests pass; physics is unchanged.

@@ -1,7 +1,7 @@
 // Special relativity: a ship with a light clock, Earth, a flash, and switchable frames.
 // Every event is computed once in Earth's frame (physics.js) and drawn in the chosen frame.
 import * as THREE from 'three';
-import {createStage} from '../shared/stage.js';
+import {createStage, INK, inkFade} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createTransport, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as sr from './physics.js';
 import {steps} from './story.js';
@@ -14,7 +14,8 @@ const TURN_AT = 10;        // Earth time of the turnaround on a round trip
 const DECK = .2;           // height of the ship's deck, where the light clock sits
 const EARTH_R = .42;       // drawn radius of Earth (not to scale)
 const COLOR = {
-  earth: 0xf0bd86, ship: 0x9fe3ef, photon: 0xfff1b8, flash: 0xc9b8ff, grid: 0x6f8ca6, cone: 0xd8e2ea, hull: 0x2b4054,
+  // Paper palette: Earth burnt orange, the ship olive, light (photon, flash, light cone) in dark ink.
+  earth: INK.spot, ship: INK.olive, photon: INK.dark, flash: INK.dark, grid: INK.olive, cone: INK.dark, hull: INK.paper2,
 };
 
 const settings = {v: .6, roundTrip: false};
@@ -28,7 +29,7 @@ const earthEvents = [[0, 0, 0], [400, 0, 0]];
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'),
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     if (!narrow()) return [24, 0];
     const top = $('story').getBoundingClientRect().bottom;
@@ -71,13 +72,13 @@ thinLines(Array.from({length: 5}, (_, i) => [-60, (i + 1) * 5, -3, 60, (i + 1) *
 // ---------------------------------------------------------------- invariants (the same in every frame)
 const CONE_H = 18;
 const coneMaterial = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-  uniforms: {color: {value: new THREE.Color(COLOR.cone)}, strength: {value: 0}},
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  uniforms: {color: {value: new THREE.Color(INK.oliveTint)}, strength: {value: 0}},
   vertexShader: 'varying float vH; void main() { vH = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `uniform vec3 color; uniform float strength; varying float vH;
     void main() { float h = vH / ${CONE_H.toFixed(1)};
-      float a = strength * (0.10 * (1.0 - h) + 0.06 * smoothstep(0.9, 1.0, fract(vH / 2.0)) * (1.0 - h));
-      gl_FragColor = vec4(color * a, a); }`,
+      float a = strength * (0.22 * (1.0 - h) + 0.12 * smoothstep(0.9, 1.0, fract(vH / 2.0)) * (1.0 - h));
+      gl_FragColor = vec4(pow(color, vec3(2.2)), a); }`,
 });
 {
   const geometry = new THREE.ConeGeometry(CONE_H, CONE_H, 128, 12, true);
@@ -91,7 +92,7 @@ const hyperbolae = [4, 8, 12, 16, 20].map(s => {
   const pts = [];
   for (let x = -40; x <= 40; x += .2) { const t = Math.hypot(s, x); if (t <= T_MAX + 2) pts.push(x, t, 0); }
   // τ = 8 s is drawn brightest: the tour compares the clocks' 8th ticks on it.
-  return stage.line({color: s === 8 ? 0xffffff : COLOR.cone, width: s === 8 ? 2.6 : s % 8 === 0 ? 1.8 : 1.2, opacity: s === 8 ? .85 : s % 8 === 0 ? .6 : .32, parent: group.invariants}).set(pts);
+  return stage.line({color: s === 8 ? INK.spot : COLOR.cone, width: s === 8 ? 2.6 : s % 8 === 0 ? 1.8 : 1.2, opacity: s === 8 ? .85 : s % 8 === 0 ? .6 : .32, parent: group.invariants}).set(pts);
 });
 
 // ---------------------------------------------------------------- Earth
@@ -100,7 +101,8 @@ function earthTexture() {
   c.width = 512; c.height = 256;
   const ctx = c.getContext('2d');
   const sea = ctx.createLinearGradient(0, 0, 0, 256);
-  sea.addColorStop(0, '#2b5f8a'); sea.addColorStop(.5, '#1b4a73'); sea.addColorStop(1, '#2b5f8a');
+  // Printed in two inks: an olive-tint sea with burnt-orange land.
+  sea.addColorStop(0, '#b9bb8e'); sea.addColorStop(.5, '#a9ac7b'); sea.addColorStop(1, '#b9bb8e');
   ctx.fillStyle = sea;
   ctx.fillRect(0, 0, 512, 256);
   let seed = 3;
@@ -108,13 +110,13 @@ function earthTexture() {
   for (let i = 0; i < 26; i++) {
     const x = random() * 512, y = 50 + random() * 156, r = 14 + random() * 40;
     for (let j = 0; j < 9; j++) {
-      ctx.fillStyle = j % 3 ? '#4d7a46' : '#8c7b52';
+      ctx.fillStyle = j % 3 ? '#d98a5f' : '#c8541f';
       ctx.beginPath();
       ctx.ellipse(x + (random() - .5) * r * 1.6, y + (random() - .5) * r, r * (.3 + random() * .5), r * (.2 + random() * .35), random() * 3, 0, Math.PI * 2);
       ctx.fill();
     }
   }
-  ctx.fillStyle = 'rgba(240,246,250,.9)';
+  ctx.fillStyle = 'rgba(244,238,224,.95)';
   ctx.fillRect(0, 0, 512, 16);
   ctx.fillRect(0, 240, 512, 16);
   const texture = new THREE.CanvasTexture(c);
@@ -124,19 +126,14 @@ function earthTexture() {
 const earth = {group: new THREE.Group()};
 earth.globe = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 32), new THREE.MeshStandardMaterial({map: earthTexture(), roughness: .85}));
 earth.globe.rotation.z = .41;
-earth.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R * 1.12, 64, 32), new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  vertexShader: `varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `varying vec3 vN; varying vec3 vV; void main() { float f = pow(1.0 - max(dot(vN, vV), 0.0), 2.2);
-    gl_FragColor = vec4(vec3(0.45, 0.72, 1.0) * f, f); }`,
-}));
+// On paper there is no glowing atmosphere: the globe is printed flat in two inks.
+earth.atmosphere = new THREE.Group();
 // Earth's clock: a bead that goes once round the ring per second of Earth's own time.
 earth.ring = new THREE.Mesh(new THREE.RingGeometry(EARTH_R * 1.45, EARTH_R * 1.55, 96), new THREE.MeshBasicMaterial({
   color: COLOR.earth, side: THREE.DoubleSide, transparent: true, opacity: .75, depthWrite: false,
 }));
 earth.ring.rotation.x = -Math.PI / 2;
-earth.bead = new THREE.Mesh(new THREE.SphereGeometry(.055, 16, 8), new THREE.MeshBasicMaterial({color: 0xffe3bd}));
+earth.bead = new THREE.Mesh(new THREE.SphereGeometry(.055, 16, 8), new THREE.MeshBasicMaterial({color: INK.dark}));
 earth.beadGlow = stage.sprite(COLOR.earth, .45, earth.group);
 earth.group.add(earth.globe, earth.atmosphere, earth.ring, earth.bead);
 group.bodies.add(earth.group);
@@ -161,19 +158,19 @@ const ship = {group: new THREE.Group(), hull: new THREE.Group()};
   stage.line({color: COLOR.ship, width: 1.6, opacity: .9, parent: ship.hull}).set([...outline, ...outline.slice(0, 3)]);
   for (const z of [-.26, .26]) {
     const engine = new THREE.Mesh(new THREE.CylinderGeometry(.11, .13, .18, 24), new THREE.MeshStandardMaterial({
-      color: 0x1b2633, emissive: COLOR.ship, emissiveIntensity: .35, metalness: .7, roughness: .3,
+      color: INK.oliveTint, metalness: 0, roughness: .9,
     }));
     engine.rotation.z = Math.PI / 2;
     engine.position.set(-2.06, .02, z);
     ship.hull.add(engine);
   }
   // The light clock on deck: two mirrors facing each other across the ship.
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(.8, .02, CLOCK_L + .22), new THREE.MeshStandardMaterial({color: 0x101820, metalness: .5, roughness: .5}));
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(.8, .02, CLOCK_L + .22), new THREE.MeshStandardMaterial({color: INK.oliveTint, metalness: 0, roughness: .9}));
   plate.position.y = DECK;
   ship.hull.add(plate);
   for (const z of [-CLOCK_L / 2 - .03, CLOCK_L / 2 + .03]) {
     const mirror = new THREE.Mesh(new THREE.BoxGeometry(.62, .16, .04), new THREE.MeshStandardMaterial({
-      color: 0xe8f2f8, emissive: 0xbfdcec, emissiveIntensity: .55, metalness: .9, roughness: .1,
+      color: INK.dark, metalness: 0, roughness: .6,
     }));
     mirror.position.set(0, DECK + .08, z);
     ship.hull.add(mirror);
@@ -182,7 +179,7 @@ const ship = {group: new THREE.Group(), hull: new THREE.Group()};
   group.bodies.add(ship.group);
 }
 const photon = {
-  core: new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: 0xffffff})),
+  core: new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: INK.dark})),
   glow: stage.sprite(COLOR.photon, .9, group.clock),
   trail: stage.line({width: 2.6, vertexColors: true, additive: true, parent: group.clock}),
 };
@@ -202,15 +199,16 @@ function tickMesh(color) {
   group.time.add(mesh);
   return mesh;
 }
-const ticks = {earth: tickMesh(0xb98a55), ship: tickMesh(0x6fb4c0)};
-const hover = stage.sprite(0xffffff, 1.1, scene, {opacity: 0});
+const ticks = {earth: tickMesh(INK.spot), ship: tickMesh(INK.olive)};
+const inked = new THREE.Color();
+const hover = stage.sprite(INK.spot, 1.1, scene, {opacity: 0});
 
 const flashView = {
   ring: stage.line({color: COLOR.flash, width: 2.6, additive: true, parent: group.flash}),
   rays: stage.line({color: COLOR.flash, width: 2, opacity: .85, segments: true, dashed: true, dash: [.25, .15], parent: group.flash}),
   emit: stage.sprite(COLOR.flash, 1.2, group.flash),
-  back: stage.sprite(0xffffff, 1.4, group.flash),
-  front: stage.sprite(0xffffff, 1.4, group.flash),
+  back: stage.sprite(INK.dark, 1.4, group.flash),
+  front: stage.sprite(INK.dark, 1.4, group.flash),
 };
 
 const sheetAlpha = (() => {
@@ -250,7 +248,7 @@ const cutLabelAt = {earth: new THREE.Vector3(), ship: new THREE.Vector3()};
 const lamps = {back: stage.sprite(COLOR.flash, 1, group.flash), front: stage.sprite(COLOR.flash, 1, group.flash)};
 
 // Tick 8 of each clock, highlighted on the τ = 8 s curve they share.
-const eight = {earth: stage.sprite(0xffffff, 1.7, group.invariants), ship: stage.sprite(0xffffff, 1.7, group.invariants)};
+const eight = {earth: stage.sprite(INK.spot, 1.7, group.invariants), ship: stage.sprite(INK.spot, 1.7, group.invariants)};
 
 // ---------------------------------------------------------------- physics
 function rebuild() {
@@ -366,8 +364,9 @@ function update(now) {
     photon.glow.position.set(...pos);
     const past = pastOf(photonEvents, now), colors = [], col = new THREE.Color(COLOR.photon);
     for (const [t] of past) {
-      const k = Math.max(.12 + .88 * Math.exp(-(now - t) / 3), .55 * blend);
-      colors.push(col.r * k, col.g * k, col.b * k);
+      const k = Math.max(.3 + .7 * Math.exp(-(now - t) / 3), .7 * blend);
+      inkFade(col, k, inked);
+      colors.push(inked.r, inked.g, inked.b);
     }
     photon.trail.set(flatWorld(past, DECK + .08), colors);
   }
@@ -401,7 +400,7 @@ function update(now) {
       const end = sr.sliceAt(events, phi, now), lit = now >= hit[0];
       lamp.visible = !!end && blend < .5;
       if (end) lamp.position.set(...toWorld(now, end[1], 0, DECK + .15));
-      lamp.material.color.set(lit ? 0xffffff : COLOR.flash);
+      lamp.material.color.set(lit ? INK.spot : INK.oliveTint);
       lamp.material.opacity = lit ? 1 : .25;
       lamp.scale.setScalar(lit ? 1.1 : .7);
     }
@@ -500,13 +499,13 @@ function updateReadout() {
   }
   const marks = [];
   if (layers.flash) {
-    marks.push({t: state.fe[0], label: 'flash', color: '#c9b8ff'});
-    marks.push({t: state.fb[0], label: Math.abs(state.ff[0] - state.fb[0]) > .4 ? 'back lit' : 'both lit', color: '#ffffff'});
-    if (Math.abs(state.ff[0] - state.fb[0]) > .4) marks.push({t: state.ff[0], label: 'front lit', color: '#ffffff'});
+    marks.push({t: state.fe[0], label: 'flash', color: '#2f3614'});
+    marks.push({t: state.fb[0], label: Math.abs(state.ff[0] - state.fb[0]) > .4 ? 'back lit' : 'both lit', color: '#c8541f'});
+    if (Math.abs(state.ff[0] - state.fb[0]) > .4) marks.push({t: state.ff[0], label: 'front lit', color: '#c8541f'});
   }
   if (settings.roundTrip) {
-    marks.push({t: display(trip.centreAt(trip.legs[1].tau0))[0], label: 'turn', color: '#9fe3ef'});
-    marks.push({t: display(trip.centreAt(trip.legs[2].tau0))[0], label: 'home', color: '#f0bd86'});
+    marks.push({t: display(trip.centreAt(trip.legs[1].tau0))[0], label: 'turn', color: '#56612a'});
+    marks.push({t: display(trip.centreAt(trip.legs[2].tau0))[0], label: 'home', color: '#c8541f'});
   }
   transport.setMarkers(marks);
 }
@@ -558,7 +557,7 @@ function updateLabels() {
       if (!showTicks || d[0] > state.now) continue;
       const el = poolLabel('tick', n++), name = el.querySelector('.name');
       name.textContent = `${i} s`;
-      name.style.color = kind === 'earth' ? '#f0bd86' : '#9fe3ef';
+      name.style.color = kind === 'earth' ? '#c8541f' : '#56612a';
       pin(el, ...toWorld(d[0], d[1], 0));
     }
   }

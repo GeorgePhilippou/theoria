@@ -1,6 +1,6 @@
 // Curved spacetime: the scene, its layers and the guided tour.
 import * as THREE from 'three';
-import {createStage, spectrumColor} from '../shared/stage.js';
+import {createStage, spectrumColor, INK, inkFade} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createTransport, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as gr from './physics.js';
 import {steps} from './story.js';
@@ -12,10 +12,14 @@ const EMITTED_NM = 470;        // wavelength of A's flashes as A measures it
 const STATIC_ANGLE = -0.62;    // A and B sit on one radial line, so flashes travel radially
 const FALL_ANGLE = -2.3;       // C falls on the far side, away from A, B and the horizon label
 const CLOCK_LIFT = .16;        // clocks sit just above the surface
+// Paper palette: clock A burnt orange, B olive, C dark ink; escaping light olive, captured light orange.
 const COLOR = {
-  a: 0xf0bd86, b: 0x9fe3ef, c: 0xf4a3c8,
-  escape: 0xcdefff, capture: 0xff9b73, photon: 0xc9b8ff, isco: 0x9cc3dd, grid: 0x6f8ca6,
+  a: INK.spot, b: INK.olive, c: INK.dark,
+  escape: INK.olive, capture: INK.spot, photon: INK.dark, isco: INK.oliveTint, grid: INK.olive,
 };
+const CSS = {a: '#c8541f', b: '#56612a', c: '#2f3614', signal: '#8a8c68', photon: '#2f3614'};
+/** Spectral colours (the physics of redshift) deepened a little so they read on paper. */
+const printed = (nm, target) => spectrumColor(nm, target).multiplyScalar(.82);
 
 const settings = {rA: 2.4, rB: 8, drop: 6};
 const layers = {clocks: false, signals: false, light: false, falling: false, landmarks: false};
@@ -24,7 +28,7 @@ let blend = 0, targetBlend = 0;
 
 // ---------------------------------------------------------------- stage
 const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'),
+  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
   viewShift: () => {
     if (!narrow()) return [24, 0]; // tour card on the left, readout on the right
     // Phones: centre the scene in the gap between the tour card and the readings.
@@ -78,7 +82,7 @@ surfaceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(surfac
 surfaceGeometry.setIndex(surfaceIndex);
 surfaceGeometry.computeVertexNormals();
 const surface = new THREE.Mesh(surfaceGeometry, new THREE.MeshStandardMaterial({
-  color: 0x24405a, roughness: .6, metalness: .2, transparent: true, opacity: .32, side: THREE.DoubleSide, depthWrite: false,
+  color: INK.oliveTint, roughness: .95, metalness: 0, transparent: true, opacity: .3, side: THREE.DoubleSide, depthWrite: false,
 }));
 group.base.add(surface);
 
@@ -114,21 +118,14 @@ function sliceLine(points, options, lift = 0) {
   return Object.assign(handle, {entry});
 }
 
-// The horizon: a black sphere where the funnel ends, with a faint rim, and its bright edge.
+// The horizon: a solid ink ball where the funnel ends, with an orange ring at its edge.
 const horizon = new THREE.Group();
-horizon.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.MeshBasicMaterial({color: 0x000000})));
-horizon.add(new THREE.Mesh(new THREE.SphereGeometry(1.06, 64, 32), new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  vertexShader: `varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `varying vec3 vN; varying vec3 vV; void main() { float f = pow(1.0 - max(dot(vN, vV), 0.0), 4.0);
-    gl_FragColor = vec4(vec3(0.75, 0.82, 1.0) * f * 0.8, f); }`,
-})));
+horizon.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.MeshBasicMaterial({color: INK.dark})));
 group.base.add(horizon);
-sliceLine(ring(1.003), {color: 0xe2ebf3, width: 2.4, opacity: .95, parent: group.base}, .01);
+sliceLine(ring(1.003), {color: INK.spot, width: 2.6, opacity: 1, parent: group.base}, .01);
 // In Time view the horizon is a surface in spacetime: a cylinder rising with far-away time.
 const horizonTube = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 64, 1, true), new THREE.MeshBasicMaterial({
-  color: 0x9fb4cf, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
+  color: INK.dark, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
 }));
 group.time.add(horizonTube);
 
@@ -140,13 +137,13 @@ sliceLine(ring(gr.ISCO), {color: COLOR.isco, width: 1.6, opacity: .6, dashed: tr
 // A small lit clock: a dark puck with a coloured rim and a bead that circles once per unit of its own time.
 function makeClock(color, parent) {
   const body = new THREE.Group();
-  const puck = new THREE.Mesh(new THREE.CylinderGeometry(.26, .28, .1, 48), new THREE.MeshStandardMaterial({color: 0x182330, metalness: .7, roughness: .3}));
+  const puck = new THREE.Mesh(new THREE.CylinderGeometry(.26, .28, .1, 48), new THREE.MeshStandardMaterial({color: INK.paper2, metalness: 0, roughness: .9}));
   const rim = new THREE.Mesh(new THREE.TorusGeometry(.29, .028, 12, 64), new THREE.MeshBasicMaterial({color}));
   rim.rotation.x = Math.PI / 2;
   rim.position.y = .05;
-  const bead = new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: INK.dark}));
   // A clock hand from the centre to the bead, so each clock reads as a clock face.
-  const hand = new THREE.Group(), stick = new THREE.Mesh(new THREE.BoxGeometry(.25, .018, .035), new THREE.MeshBasicMaterial({color: 0xffffff}));
+  const hand = new THREE.Group(), stick = new THREE.Mesh(new THREE.BoxGeometry(.25, .018, .035), new THREE.MeshBasicMaterial({color: INK.dark}));
   stick.position.x = .125;
   hand.position.y = .06;
   hand.add(stick);
@@ -157,7 +154,7 @@ function makeClock(color, parent) {
   parent.add(body);
   return {
     body, bead, hand,
-    glow: stage.sprite(color, 1.1, parent),
+    glow: Object.assign(stage.sprite(color, 1.1, parent), {visible: false}),   // no glow on paper
     worldline: stage.line({color, width: 3, parent}),
     ticks: tickMesh(color, parent),
   };
@@ -239,7 +236,7 @@ function updateFallingClock(now) {
 let schedule;
 const pulses = Array.from({length: 32}, () => stage.sprite(0xffffff, 1, group.signals));
 const signalWorldlines = stage.line({width: 1.6, segments: true, vertexColors: true, additive: true, parent: group.signals});
-const signalGuide = stage.line({color: 0x8fb6ff, width: 1.2, opacity: .3, dashed: true, dash: [.2, .2], parent: group.signals});
+const signalGuide = stage.line({color: INK.grey, width: 1.2, opacity: .6, dashed: true, dash: [.2, .2], parent: group.signals});
 const colorScratch = new THREE.Color();
 
 function updateSignals(now) {
@@ -254,7 +251,7 @@ function updateSignals(now) {
       const r = gr.signalRadius(rA, rB, now - flash.tEmit), pulse = pulses[inFlight++];
       pulse.visible = true;
       pulse.position.set(...at(r, STATIC_ANGLE, now, .2));
-      spectrumColor(EMITTED_NM * gr.wavelengthFactor(rA, r), pulse.material.color);
+      printed(EMITTED_NM * gr.wavelengthFactor(rA, r), pulse.material.color);
     }
     if (blend > .01) {
       const span = Math.min(now - flash.tEmit, schedule.delay), steps = 20;
@@ -262,8 +259,8 @@ function updateSignals(now) {
       for (let j = 0; j <= steps; j++) {
         const s = span * j / steps, r = gr.signalRadius(rA, rB, s), [x, z] = polar(r, STATIC_ANGLE);
         const point = [x, timeY(flash.tEmit + s), z];
-        spectrumColor(EMITTED_NM * gr.wavelengthFactor(rA, r), colorScratch);
-        const k = .55 * blend, c = [colorScratch.r * k, colorScratch.g * k, colorScratch.b * k];
+        inkFade(printed(EMITTED_NM * gr.wavelengthFactor(rA, r), colorScratch), .85 * blend, colorScratch);
+        const c = [colorScratch.r, colorScratch.g, colorScratch.b];
         if (previous) { flat.push(...previous[0], ...point); colors.push(...previous[1], ...c); }
         previous = [point, c];
       }
@@ -310,12 +307,14 @@ function updateRays(now) {
       guide.push(...pos);
       const age = now - p.t;
       if (age < 0) continue;
-      const k = (ray.isCritical ? 1.3 : 1) * (.42 + .25 * blend + .9 * Math.exp(-age / 2.5));
+      // Fresh light is printed at full strength; older parts of the trail fade towards the paper.
+      const k = Math.min(1, (ray.isCritical ? 1.2 : 1) * (.62 + .15 * blend + .4 * Math.exp(-age / 2.5)));
       flat.push(...pos);
-      colors.push(ray.color.r * k, ray.color.g * k, ray.color.b * k);
+      inkFade(ray.color, k, colorScratch);
+      colors.push(colorScratch.r, colorScratch.g, colorScratch.b);
     }
     ray.guide.set(guide);
-    ray.guide.material.opacity = .08 * (1 - blend) + .04 * blend;
+    ray.guide.material.opacity = .14 * (1 - blend) + .08 * blend;
     ray.trail.set(flat, colors);
     const p = gr.sampleAt(ray.data.points, now);
     ray.head.visible = !!p;
@@ -329,15 +328,15 @@ function updateRays(now) {
 
 // ---------------------------------------------------------------- time axis (Time view)
 const AXIS_ANGLE = FALL_ANGLE - .42, AXIS_R = 6.2;   // to the right of C in Time view
-const timeAxis = stage.line({color: 0xb7c6d6, width: 1.4, opacity: .5, parent: group.time});
-const axisTicks = stage.line({color: 0xb7c6d6, width: 1.4, opacity: .5, segments: true, parent: group.time});
+const timeAxis = stage.line({color: INK.dark, width: 1.4, opacity: .7, parent: group.time});
+const axisTicks = stage.line({color: INK.dark, width: 1.4, opacity: .7, segments: true, parent: group.time});
 function updateTimeAxis(now) {
   const [x, z] = polar(AXIS_R, AXIS_ANGLE), [dx, dz] = polar(.35, AXIS_ANGLE);
   timeAxis.set([x, timeY(0), z, x, timeY(Math.max(now, .01)), z]);
   const flat = [];
   for (let t = 10; t <= now; t += 10) flat.push(x, timeY(t), z, x + dx, timeY(t), z + dz);
   axisTicks.set(flat);
-  timeAxis.material.opacity = axisTicks.material.opacity = .5 * blend;
+  timeAxis.material.opacity = axisTicks.material.opacity = .7 * blend;
   group.time.visible = blend > .02;
 }
 
@@ -378,7 +377,7 @@ function updateLabels() {
   // Time view: own-time labels every 10 on the static clocks.
   let n = 0;
   if (blend > .6 && layers.clocks) {
-    for (const [r, color] of [[settings.rA, '#f0bd86'], [settings.rB, '#9fe3ef']]) {
+    for (const [r, color] of [[settings.rA, CSS.a], [settings.rB, CSS.b]]) {
       const [x, z] = polar(r, STATIC_ANGLE);
       for (let tau = 10; tau / gr.rate(r) <= state.now; tau += 10) {
         const el = poolLabel('tick', n++), name = el.querySelector('.name');
@@ -444,13 +443,13 @@ function updateReadout() {
     : `dropped from ${settings.drop.toFixed(1)} rₛ; reaches the horizon at ${fall.tauHorizon.toFixed(1)} τ of its own time`;
 
   const marks = [];
-  if (layers.signals && schedule.flashes.length) marks.push({t: schedule.flashes[0].tArrive, label: 'first flash at B', color: '#8fb6ff'});
+  if (layers.signals && schedule.flashes.length) marks.push({t: schedule.flashes[0].tArrive, label: 'first flash at B', color: CSS.signal});
   if (layers.falling) {
     // Far-away time when C is within 1% of the horizon: from here on it looks frozen.
     const eta = Math.acos(2 * 1.01 / settings.drop - 1);
-    if (Number.isFinite(eta)) marks.push({t: fall.t(eta), label: 'C freezes', color: '#f4a3c8'});
+    if (Number.isFinite(eta)) marks.push({t: fall.t(eta), label: 'C freezes', color: CSS.c});
   }
-  if (layers.light) marks.push({t: rays.at(-1).data.points.at(-1).t, label: 'violet ray escapes', color: '#c9b8ff'});
+  if (layers.light) marks.push({t: rays.at(-1).data.points.at(-1).t, label: 'dark ray escapes', color: CSS.photon});
   transport.setMarkers(marks);
 }
 
@@ -495,7 +494,7 @@ function describe(k) {
   if (k.kind === 'arrive') note = `Arrives when B reads ${fmt(k.f.tauArrive)} τ. Flashes leave A every ${FLASH_INTERVAL} τ and arrive every ${fmt(schedule.receivedInterval)} τ of B’s time.`;
   return `<h4>${k.title}</h4>${rows.join('')}<div class="note">${note}</div>`;
 }
-const hover = stage.sprite(0xffffff, 1, scene, {opacity: 0});
+const hover = stage.sprite(INK.spot, 1, scene, {opacity: 0});
 function inspect(x, y) {
   const k = pick(x, y);
   $('scene').classList.toggle('pointing', !!k);
