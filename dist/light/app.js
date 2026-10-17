@@ -150,7 +150,7 @@ group.base.add(surface);
 // A dark floor under the surface, and a faint frame round the visible area.
 {
   const inner = (N - 2 * BORDER - 4) * CELL;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(inner * 1.6, inner * 1.6), new THREE.MeshStandardMaterial({color: 0x070b12, roughness: 1}));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(inner * 1.6, inner * 1.6), new THREE.MeshBasicMaterial({color: 0x05080e}));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -1.4;
   group.base.add(floor);

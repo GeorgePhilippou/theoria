@@ -37,3 +37,10 @@
 - Rendered in the in-app browser at 1440×900 and 375×812, with no console errors. All four experiments were run (with `?debug` stepping): antenna rings, plane wave with live E/cB ≈ 1.04 at the arrows, two-slit fringes, and lens focusing.
 - Performance: 500 simulation steps of the 220 × 220 grid took about 0.26 s in the browser (≈0.5 ms per step).
 - Not yet tested: a real iPad, screen readers.
+
+# Quantum waves 0.1 verification (17 Oct 2026)
+
+- `npm test`: 6 quantum tests pass (29 in total). The fine-grid tunnelling simulation gives 38.8% against 39.3% from theory.
+- Performance: the column FFT rewrite cut a 256² step from 11.2 ms to 3.6 ms in Node. The app uses 256 × 128 (about 1.7 ms per step; about 4 ms per step in the browser including drawing).
+- Rendered at 1440×900 and 375×812, with no console errors. Packet and Measure collapse, two-slit fringes building from dots, tunnelling (37.0% on the coarse on-screen grid against 39.3% from theory), and 2p and 4f orbitals were all checked.
+- Known to refine: the scene is cramped on a phone while the tour card is open.

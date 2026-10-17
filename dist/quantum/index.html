@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b12">
+<meta name="description" content="The Schrödinger equation, solved live: a particle as a wave, the double slit dot by dot, tunnelling through walls, and the exact shapes of hydrogen orbitals.">
+<title>Quantum Waves · Theoria</title>
+<link rel="stylesheet" href="../shared/shell.css">
+<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+</head>
+<body class="v2">
+<main class="stage" aria-label="Quantum waves experiment">
+  <canvas id="scene" aria-label="3D view of a quantum wavefunction"></canvas>
+
+  <header class="topbar">
+    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Quantum mechanics · Quantum waves</span></a>
+    <nav class="view-switch" aria-label="View">
+      <button id="view-surface" class="active" aria-pressed="true">Surface</button>
+      <button id="view-top" aria-pressed="false">Top</button>
+    </nav>
+    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+    </button>
+    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+  </header>
+
+  <section class="story glass" id="story" aria-live="polite"></section>
+
+  <div class="labels" aria-hidden="true">
+    <div class="scene-label landmark" id="label-barrier"><div class="tag"><span class="name" id="label-barrier-text">Barrier</span></div></div>
+    <div class="scene-label landmark" id="label-energy"><div class="tag"><span class="name">Particle’s energy</span></div></div>
+    <div class="scene-label landmark" id="label-screen"><div class="tag"><span class="name">Detector screen</span></div></div>
+    <div class="scene-label landmark" id="label-nucleus"><div class="tag"><span class="name">Nucleus</span></div></div>
+  </div>
+
+  <section class="readout glass" id="readout" aria-label="Measurements">
+    <div class="readout-row"><i class="swatch" style="--c:#c9b8ff"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#7fe0f0"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2"></strong></div>
+    <div class="readout-row"><i class="swatch" style="--c:#ffa848"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3"></strong></div>
+  </section>
+
+  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
+    <span class="eyebrow">Show</span>
+    <div class="chips">
+      <button class="chip" data-layer="phase" aria-pressed="false"><i class="swatch" style="--c:#c9b8ff"></i>Phase colours</button>
+      <button class="chip" data-layer="detector" aria-pressed="false"><i class="swatch" style="--c:#7fe0f0"></i>Detector screen</button>
+    </div>
+    <details class="settings" open>
+      <summary>Settings</summary>
+      <label><span>Simulation speed <output id="out-rate"></output></span>
+        <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Simulation speed"></label>
+      <p class="hint">ħ = m = 1. The grid is 128 × 64 units. Hover to read probability and phase.</p>
+    </details>
+  </aside>
+
+  <footer class="transport dock glass" id="transport">
+    <button id="play" class="round-button" aria-label="Pause"></button>
+    <div class="dock-group experiment">
+      <span class="dock-label">Experiment</span>
+      <div class="segmented" role="group" aria-label="Experiment">
+        <button data-experiment="packet">Packet</button>
+        <button data-experiment="slits"><span class="wide-only">Two </span>Slits</button>
+        <button data-experiment="tunnel">Tunnel</button>
+        <button data-experiment="atom">Atom</button>
+      </div>
+    </div>
+    <div class="dock-group speed" id="param-group">
+      <span class="dock-label"><span id="param-name"></span> <output id="out-param"></output></span>
+      <input id="param" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Experiment setting">
+    </div>
+    <div class="dock-group" id="orbital-group" hidden>
+      <span class="dock-label">Orbital</span>
+      <div class="segmented" role="group" aria-label="Orbital" id="orbitals"></div>
+    </div>
+    <div class="dock-actions">
+      <button id="measure" class="text-button" title="Measure position (M)">Measure</button>
+      <button id="reset" class="text-button" title="Restart (R)">Restart</button>
+      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
+    </div>
+  </footer>
+  <div id="tip" role="status" aria-live="polite"></div>
+  <div id="toast" role="status"></div>
+  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
+
+  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
+    <button class="icon-button close" aria-label="Close">×</button>
+    <span class="eyebrow">Behind the image</span>
+    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+    <p>The time-dependent Schrödinger equation is solved live on a 256 × 128 grid (128 × 64 units) with the split-step Fourier method: free motion is done exactly in momentum space with fast Fourier transforms, and the potential is applied as two half-step phase kicks. Each part conserves probability.</p>
+    <span class="eq">iħ ∂ψ/∂t = −(ħ²/2m) ∇²ψ + V ψ,   with ħ = m = 1</span>
+
+    <h3>What you see</h3>
+    <p>Height is the probability density |ψ|² (raised to the power 0.7 and auto-scaled so that faint waves stay visible). Colour is the complex phase of ψ, going round the colour wheel once per wavelength; with phase colours off, colour shows brightness only.</p>
+
+    <h3>Measure</h3>
+    <p>Pressing Measure picks a position at random with probability |ψ|², then multiplies ψ by a narrow Gaussian there (width 1.2 units) and renormalises. This models a real position measurement of finite precision: the particle is now localised, and its momentum is uncertain, so it spreads quickly.</p>
+
+    <h3>Double slit</h3>
+    <p>The wall is a potential of height 6 (well above the particle’s energy, ≈ 2) with two gaps. Dots on the screen are drawn at random from |ψ|² along the screen line, at a rate proportional to the probability arriving there, as if electrons were sent one by one.</p>
+
+    <h3>Tunnelling</h3>
+    <p>A square barrier 1 unit wide. The readout compares the probability found beyond it with the exact plane-wave transmission, averaged over the packet’s spread of momenta (they agree to about 1% on the fine test grid; the coarser on-screen grid, 0.5 units with time step 0.2, comes within about 2 percentage points).</p>
+
+    <h3>Hydrogen</h3>
+    <p>Exact orbitals ψ = Rₙₗ(r) Y(θ, φ) with real spherical harmonics, the familiar chemistry shapes. Dots are sampled from |ψ|² by rejection sampling. Distances are in Bohr radii (0.053 nm); energies are Eₙ = −13.6 eV / n².</p>
+
+    <p class="honest">Drawn for clarity: colours, the height scale and the dot sizes. With two slits, the height is scaled to the wave beyond the wall, and the much stronger wave in front of it is shown at 30%. The simulations are 2D, and the edges of the grid gently absorb the wave so it does not wrap around; probability that leaves is gone. Spin and relativity are not included.</p>
+
+    <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/III_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume III</a> · Griffiths, <em>Introduction to Quantum Mechanics</em></p>
+    <span class="version">Theoria · Quantum waves 0.1 · Split-step Fourier, exact hydrogen</span>
+  </dialog>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

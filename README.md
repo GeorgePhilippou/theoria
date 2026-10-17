@@ -13,8 +13,8 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.3 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.2 |
 | Light as a wave · electromagnetism | `dist/light/` | v0.1 |
-| Quantum wavefunctions | — | next |
-| Entropy and the arrow of time | — | planned |
+| Quantum waves · quantum mechanics | `dist/quantum/` | v0.1 |
+| Entropy and the arrow of time | — | next |
 
 `dist/index.html` is the home page, with a card per concept.
 
@@ -78,6 +78,17 @@ Maxwell's equations in 2D TM form (Ez out of plane, H in plane), solved with the
 - Not modelled: 3D (2D waves fade as 1/√r), the other polarisation, dispersion in glass. The grid makes waves about 0.3% slow.
 
 Tests check: pulse speed c and c/n, wavelength λ/n in glass, E/cB = 1 and 1/n with B ⟂ the direction of travel, energy conservation in a metal box, < 1% reflection from the border, and a dark fringe where the path difference is λ/2.
+
+## Quantum waves: scientific scope
+
+The time-dependent Schrödinger equation (ħ = m = 1) on a 256 × 128 grid (128 × 64 units), solved with the Strang split-step Fourier method. The FFT is a radix-2 transform; the columns are transformed row-wise so memory is read in order. A cos-shaped mask absorbs the wave at the edges.
+
+- **Packet:** a Gaussian packet; height is |ψ|^1.4 (that is, (|ψ|²)^0.7), colour is the phase. **Measure** samples a position from |ψ|², multiplies ψ by a Gaussian of width 1.2 there and renormalises.
+- **Two slits:** a V = 6 wall. Detector dots are sampled from |ψ|² along the screen line at a rate proportional to the probability there. The display is scaled beyond the wall, and the incident side is dimmed.
+- **Tunnel:** a square barrier of width 1. Measured transmission is compared with the exact plane-wave formula averaged over the packet's momenta.
+- **Atom:** exact hydrogen orbitals Rₙₗ·Y with real harmonics (1s to 4f), drawn as 16–26k rejection-sampled positions, coloured by the sign of ψ.
+
+Tests check: FFT against a direct DFT, norm conservation (1e-10), packet drift ħk/m and spreading σ√(1+(t/2σ²)²), tunnelling within 1% of theory on a fine grid, radial normalisation and ⟨r⟩ for six orbitals, 1s–2s orthogonality, and the 2p node.
 
 ## Licensing
 
