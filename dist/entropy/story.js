@@ -22,9 +22,9 @@ export const steps = [
     title: 'Heat flows from hot to cold.',
     body: `<p>Fast, <b>hot</b> atoms ${sw('#ff9c4a')} on the left; slow, <b>cold</b> atoms ${sw('#4f7dff')} on the right. When the wall lifts, collisions pass energy from fast atoms to slow ones until the whole box shares one temperature.</p>
       <p>No force pushes heat one way. Again it is the odds: there are far more ways to share energy evenly.</p>`,
-    notice: 'The two temperatures in the readout meet. The gas sloshes a little first: that is a sound wave.',
+    notice: 'The floor is a thermal map: amber where the atoms are hot, blue where they are cold. Watch the colours even out, and the two temperatures in the readout meet.',
     maths: 'ΔS = N k ln(T<sub>final</sub> / √(T<sub>hot</sub> T<sub>cold</sub>)) > 0',
-    experiment: 'heat', layers: {cells: false, histogram: true, origin: false, track: false},
+    experiment: 'heat', layers: {cells: true, histogram: true, origin: false, track: false},
   },
   {
     title: 'Run it backwards.',

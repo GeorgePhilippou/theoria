@@ -14,7 +14,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.3 |
 | Light as a wave · electromagnetism | `dist/light/` | v0.3 |
 | Quantum waves · quantum mechanics | `dist/quantum/` | v0.3 |
-| Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.1 |
+| Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.2 |
 
 `dist/index.html` is the home page, with a card per concept.
 

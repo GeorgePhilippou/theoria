@@ -26,7 +26,8 @@ let latest = {total: 0, max: 0};
 const stage = createStage({
   canvas: $('scene'), fallback: $('fallback'), bloom: {strength: .45, radius: .5, threshold: .78},
   viewShift: () => {
-    if (!narrow()) return [24, 0];
+    // Desktop: move the box right, so the half where the gas starts is not under the tour card.
+    if (!narrow()) return [Math.min(170, innerWidth * .11), 30];
     const top = $('story').getBoundingClientRect().bottom;
     const below = [$('readout'), $('transport')].find(el => el.offsetParent);
     return [0, Math.round((top + below.getBoundingClientRect().top) / 2 - innerHeight / 2)];
@@ -130,6 +131,7 @@ function updateAtoms() {
 }
 
 // ---------------------------------------------------------------- counting cells
+const cellT = new Float32Array(CELLS.cols * CELLS.rows);
 function updateCells() {
   const counts = new Float32Array(CELLS.cols * CELLS.rows), expect = gas.n / counts.length;
   for (let i = 0; i < gas.n; i++) {
@@ -139,10 +141,29 @@ function updateCells() {
     counts[r * CELLS.cols + c]++;
   }
   const data = floorTexture.image.data, base = [10, 15, 24], lit = [44, 82, 120];
+  // In the heat experiment the cells become a thermal map: each is tinted by its atoms' average energy (kT),
+  // smoothed over a few frames, from blue (cold, kT = 0.25) to amber (hot, kT = 2).
+  const thermal = settings.experiment === 'heat';
+  if (thermal) {
+    const energy = new Float32Array(counts.length);
+    for (let i = 0; i < gas.n; i++) {
+      const [x, y] = gas.position(i), [u, v] = gas.velocity(i);
+      const c = Math.min(CELLS.cols - 1, Math.max(0, Math.floor(x / BOX.w * CELLS.cols)));
+      const r = Math.min(CELLS.rows - 1, Math.max(0, Math.floor(y / BOX.h * CELLS.rows)));
+      energy[r * CELLS.cols + c] += (u * u + v * v) / 2;
+    }
+    for (let k = 0; k < counts.length; k++) if (counts[k]) cellT[k] += (energy[k] / counts[k] - cellT[k]) * .15;
+  }
   // Texture row 0 lies along the floor's near edge, which is the gas's y = 0 edge.
   for (let k = 0; k < counts.length; k++) {
-    const u = layers.cells ? Math.min(1, counts[k] / (2 * expect)) : 0;
-    for (let j = 0; j < 3; j++) data[k * 4 + j] = base[j] + (lit[j] - base[j]) * u;
+    if (thermal && layers.cells) {
+      const u = Math.min(1, Math.max(0, Math.log(cellT[k] / gasLib.COLD) / Math.log(gasLib.HOT / gasLib.COLD)));
+      const cold = [40, 80, 200], hot = [235, 140, 50];
+      for (let j = 0; j < 3; j++) data[k * 4 + j] = base[j] + (cold[j] + (hot[j] - cold[j]) * u - base[j]) * .5;
+    } else {
+      const u = layers.cells ? Math.min(1, counts[k] / (2 * expect)) : 0;
+      for (let j = 0; j < 3; j++) data[k * 4 + j] = base[j] + (lit[j] - base[j]) * u;
+    }
     data[k * 4 + 3] = 255;
   }
   floorTexture.needsUpdate = true;
@@ -214,6 +235,8 @@ function setupExperiment() {
   history = [];
   stepDebt = 0;
   partitionLift = gas.partitioned ? 0 : 1;
+  cellT.fill(0);
+  for (let k = 0; k < cellT.length; k++) cellT[k] = (k % CELLS.cols) < CELLS.cols / 2 ? gasLib.HOT : gasLib.COLD;
   sample();
   updateHistogram(true);
   updateControls();
@@ -301,7 +324,8 @@ function drawChart() {
   }
 }
 
-const fmt = (v, d = 2) => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(d)}`;
+// Tiny negative values are statistical noise around zero; they are shown as 0.00 rather than as a loss.
+const fmt = (v, d = 2) => Math.abs(v) < .03 ? (0).toFixed(d) : `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(d)}`;
 function updateReadout() {
   const gain = latest.total - s0, ceiling = latest.max - s0;
   $('r1').textContent = fmt(gain);
@@ -330,6 +354,7 @@ function updateReadout() {
   if ($('direction').classList.contains('back') !== back || !$('direction').innerHTML) {
     $('direction').innerHTML = back ? '← <span class="wide-only">backwards</span>' : '<span class="wide-only">forwards</span> →';
     $('direction').classList.toggle('back', back);
+    $('time-badge').hidden = !back;
   }
   drawChart();
 }
@@ -401,7 +426,7 @@ let offsetTween = null, topView = false;
 /** Pulls the camera back on narrow-aspect windows so the whole box (and the chart behind it) stays in view. */
 function fitted(v) {
   const halfWidth = (BOX.w + 3) / 2, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.12 : 1.45) / v.length()));
+  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.12 : 1.6) / v.length()));
 }
 let framing = 'surface';
 function setFraming(name, animate = true) {
@@ -556,5 +581,5 @@ requestAnimationFrame(frame);
 
 // With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__entropy = {get gas() { return gas; }, settings, reverseTime, stage, partition, snap() { if (offsetTween) offsetTween.u = .999; }, run(seconds) { const was = playing; playing = true; simulate(0); stepDebt += seconds * RATES[settings.rate] * TIME_RATE / gas.dt; simulate(0); playing = was; }};
+  window.__entropy = {get gas() { return gas; }, settings, story, reverseTime, stage, partition, snap() { if (offsetTween) offsetTween.u = .999; partitionLift = gas.partitioned ? 0 : 1; }, run(seconds) { const was = playing; playing = true; simulate(0); stepDebt += seconds * RATES[settings.rate] * TIME_RATE / gas.dt; simulate(0); playing = was; }};
 }

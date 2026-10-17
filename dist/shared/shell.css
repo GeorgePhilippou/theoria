@@ -421,3 +421,16 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
   #toast { top: auto; bottom: calc(var(--dock-h, 140px) + 30px); transform: translate(-50%, 6px); border-radius: 14px; }
   #toast.visible { transform: translate(-50%, 0); }
 }
+
+/* A badge over the scene, e.g. while time runs backwards */
+.time-badge {
+  white-space: nowrap;
+  position: absolute; z-index: 5; top: 74px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px;
+  background: rgba(201, 184, 255, .14); border: 1px solid rgba(201, 184, 255, .45); color: #e3daff;
+  font-size: 13px; letter-spacing: .04em; pointer-events: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: badge-pulse 2.4s ease-in-out infinite;
+}
+.time-badge svg { width: 15px; height: 15px; }
+@keyframes badge-pulse { 50% { box-shadow: 0 0 22px rgba(201, 184, 255, .35); } }
+@media (max-width: 720px) { .time-badge { top: auto; bottom: calc(var(--dock-h, 140px) + 30px); white-space: nowrap; font-size: 12px; padding: 5px 12px; background: rgba(28, 22, 48, .92); } }

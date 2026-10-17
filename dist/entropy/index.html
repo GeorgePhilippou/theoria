@@ -92,6 +92,7 @@
       <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
     </div>
   </footer>
+  <div class="time-badge" id="time-badge" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4L2.5 8 6 12M3 8h7.5a3 3 0 0 1 0 6H9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Time running backwards</div>
   <div id="tip" role="status" aria-live="polite"></div>
   <div id="toast" role="status"></div>
   <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
@@ -118,10 +119,10 @@
     <h3>Touch and keys</h3>
     <p>Drag to orbit, pinch or scroll to zoom, hover over an atom to read it, click to follow it. Keys: Space pause, 1–3 experiments, B reverse, T 3D/Top, R restart.</p>
 
-    <p class="honest">Drawn for clarity: colours (blue slow, amber fast), the glow on the followed atom and the height of the speed chart, which rescales to fit. On phones the atoms are drawn 1.7 times larger than their true size. Real gases are 3D and hugely larger (about 10<sup>22</sup> atoms in a litre of air), which makes the odds of going backwards unimaginably smaller still. The atoms here are classical; quantum effects are left out.</p>
+    <p class="honest">Drawn for clarity: colours (blue slow, amber fast; in the heat experiment the floor is tinted by each cell's average energy, smoothed over a few frames), the glow on the followed atom and the height of the speed chart, which rescales to fit. On phones the atoms are drawn 1.7 times larger than their true size. Real gases are 3D and hugely larger (about 10<sup>22</sup> atoms in a litre of air), which makes the odds of going backwards unimaginably smaller still. The atoms here are classical; quantum effects are left out.</p>
 
     <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/I_46.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 46</a> · Sean Carroll, <em>From Eternity to Here</em></p>
-    <span class="version">Theoria · Entropy 0.1 · Reversible molecular dynamics</span>
+    <span class="version">Theoria · Entropy 0.2 · Reversible molecular dynamics</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>

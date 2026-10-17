@@ -97,3 +97,12 @@
 - Tunnelling: "Reflected" and "Tunnelled through" labels give the measured split (63% / 37% at V₀ = 1.6); the energy label sits beside the barrier.
 - Phones: toasts appear above the dock instead of over the tour card (all pages).
 - Physics is unchanged, and all 35 tests pass. No console errors.
+
+# Entropy 0.2: clarity pass (17 Oct 2026)
+
+- Every tour step was reviewed at 1440×900 and 375×812.
+- Desktop framing moves the box right, so the half where the gas starts is no longer under the tour card.
+- The entropy readout shows tiny negative fluctuations (under 0.03 per atom) as 0.00.
+- Heat: the floor becomes a thermal map (each cell's average kT, smoothed, on a log scale from 0.25 to 2): amber on the hot side, blue on the cold, evening out as heat flows.
+- Reverse: a "Time running backwards" badge appears over the scene (above the dock on phones) while the run is reversed.
+- Physics is unchanged, and all 35 tests pass. No console errors.
