@@ -7,17 +7,17 @@ export const steps = [
     title: 'Light is a ripple of fields.',
     body: `<p>A charge shaking up and down, like the current in an antenna, tugs on the electric field around it. The disturbance spreads outward as a wave.</p>
       <p>The surface shows the electric field: ${sw(SWATCH.up)} up one way, ${sw(SWATCH.down)} down the other. It moves at the <b>speed of light</b>, because it <b>is</b> light, just with a longer wavelength than your eyes can see.</p>`,
-    notice: 'Tap the surface anywhere to make a ripple of your own.',
+    notice: 'The bracket spans one wavelength, crest to crest, measured on the live wave. Tap the surface to make a ripple of your own.',
     maths: 'c = 1 / √(μ₀ε₀) ≈ 300 000 km/s',
-    experiment: 'antenna', view: 'surface', layers: {arrows: true},
+    experiment: 'antenna', view: 'surface', layers: {ruler: true},
   },
   {
     title: 'Electric and magnetic, together.',
     body: `<p>Far from its source, light becomes a straight-fronted wave. The arrows sample it along one line: ${sw(SWATCH.e)} the <b>electric</b> field points up and down, ${sw(SWATCH.b)} the <b>magnetic</b> field side to side.</p>
       <p>They rise and fall together, at right angles to each other and to the direction of travel. A changing electric field makes a magnetic one, and a changing magnetic field makes an electric one. That is what keeps light going.</p>`,
-    notice: 'The readout measures E / cB from the simulation: it stays at 1.',
+    notice: 'The readout measures E / cB from the simulation: it stays at 1. The white arrow marks the direction of travel.',
     maths: 'E = c B,  E ⟂ B ⟂ direction of travel',
-    experiment: 'plane', view: 'surface', layers: {arrows: true},
+    experiment: 'plane', view: 'surface', layers: {arrows: true, ruler: true},
   },
   {
     title: 'Waves add up.',
@@ -25,7 +25,7 @@ export const steps = [
       <p>Where crest meets crest the waves add into a <b>bright</b> band. Where crest meets trough they cancel into a <b>dark</b> one. The colours now show the average brightness.</p>`,
     notice: 'Bright and dark bands fan out and land on the screen at the far side. Narrow the slit gap and they spread further apart.',
     maths: 'bright where d sin θ = m λ',
-    experiment: 'slits', view: 'surface', layers: {intensity: true},
+    experiment: 'slits', view: 'top', layers: {intensity: true},
   },
   {
     title: 'Glass slows light down.',

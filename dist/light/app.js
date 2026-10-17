@@ -19,7 +19,7 @@ const PARAM = {
 };
 
 const settings = {experiment: 'antenna', lambda: 20, gap: 44, n: 1.5, rate: 1};
-const layers = {arrows: false, intensity: false};
+const layers = {arrows: false, intensity: false, ruler: false};
 const narrow = () => innerWidth <= 720;
 let heightOn = 1, targetHeight = 1, intensityMix = 0, playing = !reducedMotion, stepDebt = 0;
 
@@ -35,7 +35,7 @@ const stage = createStage({
 });
 const {scene, camera, controls} = stage;
 Object.assign(controls, {minDistance: 6, maxDistance: 110, maxPolarAngle: Math.PI * .47});
-const group = {base: new THREE.Group(), props: new THREE.Group(), arrows: new THREE.Group(), source: new THREE.Group(), screen: new THREE.Group()};
+const group = {base: new THREE.Group(), props: new THREE.Group(), arrows: new THREE.Group(), source: new THREE.Group(), screen: new THREE.Group(), ruler: new THREE.Group()};
 for (const g of Object.values(group)) scene.add(g);
 
 const cellToWorld = (i, j) => [(i + .5) * CELL - W / 2, (W / 2) - (j + .5) * CELL];
@@ -134,7 +134,7 @@ const surfaceMaterial = new THREE.ShaderMaterial({
       float d = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
       float alpha = smoothstep(edge, edge + fade, d);
       if (alpha <= 0.0) discard;
-      vec3 base = mix(diverging(vVal), heat(vInt), mode);
+      vec3 base = mix(diverging(vVal), heat(vInt) * 0.8, mode);
       vec3 n = normalize(vNormal);
       vec3 l = normalize((viewMatrix * vec4(light, 0.0)).xyz);
       float diff = max(dot(n, l), 0.0);
@@ -320,6 +320,52 @@ function updateArrows() {
   arrows.drop.set([xa, RAIL, z, xa, 0, z, xb, RAIL, z, xb, 0, z]);
 }
 
+// The direction of travel, at the far end of the arrow line.
+const travel = new THREE.Mesh(new THREE.ConeGeometry(.1, .32, 16), new THREE.MeshBasicMaterial({color: 0xdfe8f0}));
+travel.geometry.rotateZ(-Math.PI / 2);
+group.arrows.add(travel);
+const travelShaft = stage.line({color: 0xdfe8f0, width: 2, opacity: .8, parent: group.arrows});
+const travelTip = new THREE.Vector3();
+function updateTravel() {
+  const [xb] = cellToWorld(probe.i1, 0), z = cellToWorld(0, probe.j)[1];
+  travel.position.set(xb + .75, RAIL, z);
+  travelShaft.set([xb + .1, RAIL, z, xb + .62, RAIL, z]);
+  travelTip.set(xb + .75, RAIL + .25, z);
+}
+
+// ---------------------------------------------------------------- one wavelength, measured crest to crest on the live wave
+const RULER_H = 1.75;
+const ruler = stage.line({color: 0xffe2b8, width: 2, opacity: .9, segments: true, parent: group.ruler});
+const rulerMid = new THREE.Vector3();
+let rulerSpan = null;
+function updateRuler() {
+  const on = layers.ruler && (settings.experiment === 'antenna' || settings.experiment === 'plane') && heightOn > .5;
+  group.ruler.visible = on;
+  rulerSpan = null;
+  if (!on) return;
+  // Antenna: along the radius to the left of the source (the arrows use the right). Plane wave: a row nearer the viewer.
+  const antenna = settings.experiment === 'antenna', j = antenna ? N / 2 : N / 2 - 40, dir = antenna ? -1 : 1;
+  const start = antenna ? N / 2 - Math.round(1.2 * settings.lambda) : BORDER + 40, stop = antenna ? BORDER + 6 : N - BORDER - 6;
+  let peak = 0;
+  for (let i = start; i !== stop; i += dir) peak = Math.max(peak, Math.abs(field.ez[j * N + i]));
+  if (peak < 1e-9) return;
+  const crests = [];
+  for (let i = start + dir; i !== stop - dir && crests.length < 2; i += dir) {
+    const a = field.ez[j * N + i - dir], b = field.ez[j * N + i], c = field.ez[j * N + i + dir];
+    if (b > a && b >= c && b > .4 * peak) {
+      // Refine the crest between cells with a parabola through the three samples.
+      const shift = .5 * (a - c) / (a - 2 * b + c);
+      crests.push(i + dir * (Number.isFinite(shift) ? shift : 0));
+    }
+  }
+  if (crests.length < 2) return;
+  const z = cellToWorld(0, j)[1], [x1] = cellToWorld(crests[0], 0), [x2] = cellToWorld(crests[1], 0);
+  const top = i => Math.tanh(field.ez[j * N + Math.round(i)] / scale) * surfaceMaterial.uniforms.heightScale.value;
+  ruler.set([x1, RULER_H, z, x2, RULER_H, z, x1, RULER_H, z, x1, top(crests[0]) + .05, z, x2, RULER_H, z, x2, top(crests[1]) + .05, z]);
+  rulerMid.set((x1 + x2) / 2, RULER_H + .1, z);
+  rulerSpan = Math.abs(crests[1] - crests[0]);
+}
+
 // ---------------------------------------------------------------- measurements
 const ratioWindow = {e: 0, h: 0, steps: 0, value: null};
 function measure() {
@@ -345,7 +391,7 @@ function writeTexture() {
   }
   const rms = Math.sqrt(sum / count);
   scale += (Math.max(rms * 4.2, 1e-4) - scale) * .05;
-  iScale += (Math.max(isum / count * 3.2, 1e-8) - iScale) * .05;
+  iScale += (Math.max(isum / count * 4.5, 1e-8) - iScale) * .05;
   const data = texture.image.data;
   const dimBefore = settings.experiment === 'slits' ? WALL.i : -1;
   for (let k = 0; k < N * N; k++) {
@@ -353,7 +399,7 @@ function writeTexture() {
     const v = Math.tanh(field.ez[k] / scale * (k % N < dimBefore ? .35 : 1));
     data[k * 4] = (v * .5 + .5) * 255;
     // In front of the slit wall the light is far brighter; dim it there so the fringes stay readable.
-    data[k * 4 + 1] = Math.tanh(avgI[k] / iScale * (k % N < dimBefore ? .025 : 1)) * 255;
+    data[k * 4 + 1] = Math.tanh(avgI[k] / iScale * (k % N < dimBefore ? .01 : 1)) * 255;
     data[k * 4 + 2] = field.metal[k] ? 255 : field.eps[k] > 1.01 ? 128 : 0;
     data[k * 4 + 3] = 255;
   }
@@ -400,6 +446,9 @@ function updateLabels() {
   const pin = (id, p, show) => positionLabel($(id), labelPoint.copy(p), camera, {show, avoid: rects});
   pin('label-e', arrowTips.e, layers.arrows);
   pin('label-b', arrowTips.b, layers.arrows);
+  pin('label-travel', travelTip, layers.arrows);
+  $('label-ruler-text').textContent = rulerSpan ? `one wavelength · ${rulerSpan.toFixed(0)} cells` : '';
+  pin('label-ruler', rulerMid, !!rulerSpan);
   pin('label-screen', screenTop, group.screen.visible);
   if (lens) {
     const [x, z] = cellToWorld(lens.x0, cy - lens.a - 4);
@@ -461,12 +510,13 @@ const FRAMING = {
 const offset = new THREE.Vector3(), target = new THREE.Vector3(0, 0, 0);
 let offsetTween = null;
 /** Pulls the camera back on narrow-aspect windows so the whole visible grid stays in view. */
-function fitted(v) {
+function fitted(v, top = false) {
   const halfWidth = (N - 2 * BORDER) * CELL / 2 + .6, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : 1.7) / v.length()));
+  // From above, leave room for the side panels so the screen at the far edge stays visible.
+  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : top ? 2.1 : 1.7) / v.length()));
 }
 function setFraming(name, animate = true) {
-  const to = fitted(new THREE.Vector3(...FRAMING[name]()));
+  const to = fitted(new THREE.Vector3(...FRAMING[name]()), name === 'top');
   if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
   else { offset.copy(to); offsetTween = null; }
 }
@@ -592,7 +642,8 @@ function frame(time) {
   surfaceMaterial.uniforms.mode.value = intensityMix;
   group.props.scale.y = .25 + .75 * heightOn;
   writeTexture();
-  if (layers.arrows) updateArrows();
+  if (layers.arrows) { updateArrows(); updateTravel(); }
+  updateRuler();
   updateSource();
   updateScreen();
 
@@ -617,5 +668,5 @@ requestAnimationFrame(frame);
 
 // With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__light = {field, settings, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
+  window.__light = {field, settings, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; intensityMix = layers.intensity ? 1 : 0; }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
 }

@@ -80,3 +80,11 @@
 - Simultaneity: lamps at the ship's back and front light when the flash reaches them and stay lit ("Back · lit", "Front · not yet").
 - Length: the ship's front and back worldlines are drawn as a band, with the two cuts marked: Earth's "now" gives 3.20 ls and the ship's "now" 4.00 ls at 0.6 c. Hidden on the round trip.
 - Twin paradox: Earth and Ship labels no longer collide at the reunion. Physics is unchanged, and all 35 tests pass. No console errors.
+
+# Light as a wave 0.3: clarity pass (17 Oct 2026)
+
+- Every tour step was reviewed at 1440×900 and 375×812.
+- Step 1 no longer shows the E and B arrows (introduced in step 2). A "one wavelength" bracket is measured crest to crest on the live wave (parabolic peak fit); it reads 20 cells at the default setting.
+- Step 2 marks the direction of travel at the end of the arrow line; E/cB read 1.03.
+- Step 3 opens in Top view, where the brightness map shows the fan of bright and dark bands landing on the screen. Brightness colours were toned down (they saturated to white), and Top view pulls back so the screen is not under the readout.
+- Physics is unchanged, and all 35 tests pass. No console errors.
