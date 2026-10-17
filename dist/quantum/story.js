@@ -6,7 +6,7 @@ export const steps = [
     title: 'A particle is a wave.',
     body: `<p>In quantum mechanics an electron is described by a wave, ψ. The <b>height</b> shows where you are likely to find it: the probability, |ψ|². The <b>colours</b> show the wave’s phase, the hidden rhythm that makes it interfere.</p>
       <p>The faster the particle, the tighter the colour bands. Left alone, the wave also <b>spreads out</b>.</p>`,
-    notice: 'Press Measure: the wave collapses to one spot, then spreads again.',
+    notice: 'The bracket above the wave shows its spread. Press Measure: the wave collapses to one spot, then spreads again.',
     maths: 'λ = h / p  (de Broglie)',
     experiment: 'packet', view: 'surface', layers: {phase: true},
   },
@@ -14,7 +14,7 @@ export const steps = [
     title: 'Through two slits at once.',
     body: `<p>Fire electrons at a wall with two slits. The wave goes through <b>both</b> and interferes on the far side, just like light.</p>
       <p>But each electron arrives as a <b>single dot</b> at a random place. Only after many dots does the pattern of bright and dark stripes appear: the wave sets the odds, each detection is a roll of the dice.</p>`,
-    notice: 'Watch the screen on the right fill dot by dot into stripes.',
+    notice: 'Watch the screen fill dot by dot. The curve on it counts the dots: its bumps are the stripes.',
     maths: 'probability of a dot ∝ |ψ|²',
     experiment: 'slits', view: 'surface', layers: {phase: true, detector: true},
   },
@@ -22,7 +22,7 @@ export const steps = [
     title: 'Through walls.',
     body: `<p>This barrier is higher than the particle’s energy. A ball would always bounce back.</p>
       <p>The wave <b>leaks into</b> the barrier and part of it comes out the other side: the particle <b>tunnels</b>. This is how the Sun fuses hydrogen and how some microchips store data.</p>`,
-    notice: 'The readout compares the measured transmission with the exact formula. Raise the barrier and watch it fall.',
+    notice: 'The labels split the wave into reflected and tunnelled parts. The readout compares the measured share with the exact formula. Raise the barrier and watch it fall.',
     maths: 'T ≈ e^(−2κa),  κ = √(2m(V₀ − E)) / ħ',
     experiment: 'tunnel', view: 'surface', layers: {phase: true},
   },

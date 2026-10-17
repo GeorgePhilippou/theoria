@@ -59,6 +59,7 @@ function potentialFor(name) {
 }
 function launch() {
   const name = settings.experiment;
+  found = null;
   if (name === 'packet') wave.setPacket({x0: -28, y0: 0, kx: settings.k, sx: 5, sy: 5});
   if (name === 'slits') wave.setPacket({x0: -36, y0: 0, kx: 2, sx: 5, sy: 12});
   if (name === 'tunnel') wave.setPacket({x0: -30, y0: 0, kx: 1.5, sx: 6, sy: 7});
@@ -180,7 +181,22 @@ dots.frustumCulled = false;
 group.dots.add(dots);
 const dotMatrix = new THREE.Matrix4();
 let dotBudget = 0;
-function clearDots() { dots.count = 0; dots.instanceMatrix.needsUpdate = true; dotBudget = 0; }
+// A running tally of arrivals along the screen, drawn on its face: the stripes show as bumps long before the dots alone make them obvious.
+const TALLY_BINS = 48, tally = new Float32Array(TALLY_BINS);
+const tallyLine = stage.line({color: 0xc9b8ff, width: 2.2, opacity: .95, parent: group.dots});
+function clearDots() { dots.count = 0; dots.instanceMatrix.needsUpdate = true; dotBudget = 0; tally.fill(0); tallyLine.set([]); }
+function drawTally() {
+  // Lightly smoothed over neighbouring bins, so a handful of dots does not read as noise.
+  const smooth = Array.from(tally, (_, b) => (tally[Math.max(0, b - 1)] + 2 * tally[b] + tally[Math.min(TALLY_BINS - 1, b + 1)]) / 4);
+  const peak = Math.max(...smooth);
+  if (peak < 1) { tallyLine.set([]); return; }
+  const flat = [], x = DETECTOR_X * S - .05;
+  for (let b = 0; b < TALLY_BINS; b++) {
+    const z = zMin + (zMax - zMin) * (b + .5) / TALLY_BINS;
+    flat.push(x, .1 + 1.65 * smooth[b] / peak, z);
+  }
+  tallyLine.set(flat);
+}
 
 function buildProps() {
   for (const child of [...group.props.children]) if (child !== energyLine.object) { group.props.remove(child); child.geometry?.dispose(); }
@@ -277,7 +293,7 @@ function detect() {
     weights.push(w);
     total += w;
   }
-  dotBudget += total * DX * 90;
+  dotBudget += total * DX * 270;
   while (dotBudget >= 1 && dots.count < MAX_DOTS) {
     dotBudget -= 1;
     let r = Math.random() * total, j = 0;
@@ -287,6 +303,8 @@ function detect() {
     dotMatrix.makeTranslation(x - .03, .12 + Math.random() * 1.66, z);
     dots.setMatrixAt(dots.count++, dotMatrix);
     dots.instanceMatrix.needsUpdate = true;
+    const b = Math.floor((z - zMin) / (zMax - zMin) * TALLY_BINS);
+    if (b >= 0 && b < TALLY_BINS) tally[b]++;
   }
 }
 
@@ -305,6 +323,19 @@ function simulate(dtFrame) {
 
 // ---------------------------------------------------------------- measurement
 const flash = stage.sprite(0xffffff, 2, scene, {opacity: 0});
+let found = null;   // where the last measurement found the particle, shown for a few seconds
+
+// The packet's spread: a bracket of ±1 standard deviation along x, riding above the wave.
+const spreadLine = stage.line({color: 0xdfe8f0, width: 1.8, opacity: .85, segments: true});
+const spreadMid = new THREE.Vector3();
+let spreadShown = false;
+function updateSpread() {
+  spreadShown = settings.experiment === 'packet' && heightOn > .5 && statsCache.sd > 0;
+  if (!spreadShown) { spreadLine.set([]); return; }
+  const {mean, sd, meanY = 0} = statsCache, h = HEIGHT * heightOn + .35, [x1, , z] = toWorld(mean - sd, meanY), [x2] = toWorld(mean + sd, meanY);
+  spreadLine.set([x1, h, z, x2, h, z, x1, h, z, x1, h - .25, z, x2, h, z, x2, h - .25, z]);
+  spreadMid.set((x1 + x2) / 2, h + .05, z);
+}
 function measure() {
   if (settings.experiment === 'atom') {
     toast('In the atom view the dots already are many measurements: each is one possible result.');
@@ -327,6 +358,7 @@ function measure() {
   ampScale = 1e-9;
   flash.position.set(...toWorld(x0, y0, .6));
   flash.material.opacity = 1;
+  found = {at: toWorld(x0, y0, 1.2), until: performance.now() + 3500};
   toast(`Found at x = ${x0.toFixed(1)}, y = ${y0.toFixed(1)}. Beforehand, the chance of finding it within 1 unit of there was ${nearby < .001 ? 'under 0.1' : (nearby * 100).toFixed(1)}%.`);
 }
 
@@ -341,7 +373,16 @@ let statsCache = {mean: 0, sd: 0}, statsFrame = 0;
 function updateReadout() {
   const name = settings.experiment;
   if (name === 'packet') {
-    if (++statsFrame % 6 === 0) statsCache = wave.statsX();
+    if (++statsFrame % 6 === 0) {
+      statsCache = wave.statsX();
+      // Mean y as well, so the spread bracket follows a packet found off the centre line.
+      let sum = 0, sy = 0;
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+        const k = j * NX + i, p = wave.re[k] ** 2 + wave.im[k] ** 2;
+        sum += p; sy += p * wave.yAt(j);
+      }
+      statsCache.meanY = sum > 0 ? sy / sum : 0;
+    }
     setRow(1, 'Momentum', 'p = ħk, in units where ħ = m = 1', `k = ${fmt(settings.k)}`);
     setRow(2, 'Wavelength', 'λ = h/p = 2π/k: one trip round the colours', `${fmt(2 * Math.PI / settings.k)}`);
     setRow(3, 'Spread', 'standard deviation of position along x, measured', `${fmt(statsCache.sd, 1)}`);
@@ -369,7 +410,17 @@ function updateLabels() {
   const name = settings.experiment, yEdge = LY / 2 - ABSORB * DX;
   $('label-barrier-text').textContent = name === 'tunnel' ? `Barrier V₀ = ${fmt(settings.V0)}` : 'Wall with two slits';
   pin('label-barrier', toWorld(.5, -yEdge, name === 'tunnel' ? settings.V0 * E_SCALE + .2 : 2.1), name === 'tunnel' || name === 'slits');
-  pin('label-energy', toWorld(-yEdge * 1.2, yEdge, 1.125 * E_SCALE + .15).map((v, i) => i === 2 ? zMax + .15 : v), name === 'tunnel');
+  // The energy label sits just in front of the barrier, where the comparison with its height is made.
+  const passed = tunnelBest > .002 ? tunnelBest : tunnelLast ?? 0, split = name === 'tunnel' && passed > .01;
+  $('label-reflected-text').textContent = `Reflected · ${Math.round((1 - passed) * 100)}%`;
+  $('label-transmitted-text').textContent = `Tunnelled through · ${Math.round(passed * 100)}%`;
+  // On phones the energy label gives way once the reflected and tunnelled labels appear.
+  pin('label-energy', toWorld(-12, yEdge, 1.125 * E_SCALE + .15).map((v, i) => i === 2 ? zMax + .15 : v), name === 'tunnel' && !(split && narrow()));
+  pin('label-reflected', toWorld(-16, 0, HEIGHT * heightOn * .6 + .4), split);
+  pin('label-transmitted', toWorld(26, 0, HEIGHT * heightOn * .6 + .4), split);
+  pin('label-found', found ? found.at : [0, 0, 0], !!found && performance.now() < found.until && name !== 'atom');
+  $('label-spread-text').textContent = `spread ±${fmt(statsCache.sd, 1)}`;
+  pin('label-spread', [spreadMid.x, spreadMid.y, spreadMid.z], spreadShown);
   pin('label-screen', toWorld(DETECTOR_X, yEdge, 2.05), name === 'slits' && layers.detector);
   pin('label-nucleus', [0, -.35, 0], name === 'atom');
 }
@@ -557,6 +608,8 @@ function frame(time) {
   group.props.scale.y = .2 + .8 * heightOn;
   flash.material.opacity *= .94;
   if (settings.experiment !== 'atom') writeTexture();
+  updateSpread();
+  if (settings.experiment === 'slits' && layers.detector) drawTally();
 
   controls.update();
   offset.copy(camera.position).sub(controls.target);
@@ -579,5 +632,5 @@ requestAnimationFrame(frame);
 
 // With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__quantum = {wave, settings, measure, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
+  window.__quantum = {wave, settings, measure, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
 }

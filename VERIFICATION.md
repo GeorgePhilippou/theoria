@@ -88,3 +88,12 @@
 - Step 2 marks the direction of travel at the end of the arrow line; E/cB read 1.03.
 - Step 3 opens in Top view, where the brightness map shows the fan of bright and dark bands landing on the screen. Brightness colours were toned down (they saturated to white), and Top view pulls back so the screen is not under the readout.
 - Physics is unchanged, and all 35 tests pass. No console errors.
+
+# Quantum waves 0.3: clarity pass (17 Oct 2026)
+
+- Every tour step was reviewed at 1440×900 and 375×812.
+- Packet: a bracket of ±1 standard deviation rides above the wave (following its mean x and y), so the spreading is visible; it reads ±1.7 shortly after a measurement. Measure now leaves a "Found here" marker for a few seconds.
+- Two slits: a running tally of detections (lightly smoothed over neighbouring bins) is drawn on the screen, so the stripes show as bumps after about 100 dots; dots arrive three times faster than before.
+- Tunnelling: "Reflected" and "Tunnelled through" labels give the measured split (63% / 37% at V₀ = 1.6); the energy label sits beside the barrier.
+- Phones: toasts appear above the dock instead of over the tour card (all pages).
+- Physics is unchanged, and all 35 tests pass. No console errors.

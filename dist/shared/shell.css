@@ -415,3 +415,9 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 .v2 .scene-label.axis-tick .tag { transform: translate(10px, -50%); }
 .v2 .scene-label.axis-title .tag { transform: translate(-50%, -100%); }
 @media (max-width: 720px) { .readout-row .bar { display: none; } }
+
+/* Phones: messages appear just above the dock, not over the tour card. */
+@media (max-width: 720px) {
+  #toast { top: auto; bottom: calc(var(--dock-h, 140px) + 30px); transform: translate(-50%, 6px); border-radius: 14px; }
+  #toast.visible { transform: translate(-50%, 0); }
+}

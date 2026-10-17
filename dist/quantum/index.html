@@ -37,6 +37,10 @@
     <div class="scene-label landmark" id="label-energy"><div class="tag"><span class="name">Particle’s energy</span></div></div>
     <div class="scene-label landmark" id="label-screen"><div class="tag"><span class="name">Detector screen</span></div></div>
     <div class="scene-label landmark" id="label-nucleus"><div class="tag"><span class="name">Nucleus</span></div></div>
+    <div class="scene-label landmark" id="label-reflected"><div class="tag"><span class="name" id="label-reflected-text"></span></div></div>
+    <div class="scene-label landmark" id="label-transmitted"><div class="tag"><span class="name" id="label-transmitted-text"></span></div></div>
+    <div class="scene-label landmark" id="label-found"><div class="tag"><span class="name" style="color:#fff">Found here</span></div></div>
+    <div class="scene-label curve" id="label-spread"><div class="tag"><span class="name" id="label-spread-text"></span></div></div>
   </div>
 
   <section class="readout glass" id="readout" aria-label="Measurements">
@@ -102,7 +106,7 @@
     <p>Pressing Measure picks a position at random with probability |ψ|², then multiplies ψ by a narrow Gaussian there (width 1.2 units) and renormalises. This models a real position measurement of finite precision: the particle is now localised, and its momentum is uncertain, so it spreads quickly.</p>
 
     <h3>Double slit</h3>
-    <p>The wall is a potential of height 6 (well above the particle’s energy, ≈ 2) with two gaps. Dots on the screen are drawn at random from |ψ|² along the screen line, at a rate proportional to the probability arriving there, as if electrons were sent one by one.</p>
+    <p>The wall is a potential of height 6 (well above the particle’s energy, ≈ 2) with two gaps. Dots on the screen are drawn at random from |ψ|² along the screen line, at a rate proportional to the probability arriving there, as if electrons were sent one by one. The curve on the screen is the running tally of those dots.</p>
 
     <h3>Tunnelling</h3>
     <p>A square barrier 1 unit wide. The readout compares the probability found beyond it with the exact plane-wave transmission, averaged over the packet’s spread of momenta (they agree to about 1% on the fine test grid; the coarser on-screen grid, 0.5 units with time step 0.2, comes within about 2 percentage points).</p>
@@ -113,7 +117,7 @@
     <p class="honest">Drawn for clarity: colours, the height scale and the dot sizes. With two slits, the height is scaled to the wave beyond the wall, and the much stronger wave in front of it is shown at 30%. The simulations are 2D, and the edges of the grid gently absorb the wave so it does not wrap around; probability that leaves is gone. Spin and relativity are not included.</p>
 
     <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/III_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume III</a> · Griffiths, <em>Introduction to Quantum Mechanics</em></p>
-    <span class="version">Theoria · Quantum waves 0.2 · Split-step Fourier, exact hydrogen</span>
+    <span class="version">Theoria · Quantum waves 0.3 · Split-step Fourier, exact hydrogen</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>
