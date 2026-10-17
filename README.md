@@ -13,6 +13,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.4 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.3 |
 | Light as a wave · electromagnetism | `dist/light/` | v0.4 |
+| Rays and lenses · optics | `dist/optics/` | v0.1 |
 | Quantum waves · quantum mechanics | `dist/quantum/` | v0.3 |
 | Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.2 |
 
@@ -79,6 +80,19 @@ Maxwell's equations in 2D TM form (Ez out of plane, H in plane), solved with the
 - Not modelled: 3D (2D waves fade as 1/√r), the other polarisation, dispersion in glass. The grid makes waves about 0.3% slow.
 
 Tests check: pulse speed c and c/n, wavelength λ/n in glass, E/cB = 1 and 1/n with B ⟂ the direction of travel, energy conservation in a metal box, < 1% reflection from the border, and a dark fringe where the path difference is λ/2.
+
+## Rays and lenses: scientific scope
+
+Exact 2D ray tracing, in centimetres. Elements are closed boundaries of straight pieces and true circular arcs (exact normals, no faceting); outside them is air.
+
+- **Refraction:** vector Snell's law at every surface; total internal reflection when no refracted ray exists.
+- **Partial reflection:** unpolarised Fresnel reflectance, (R_s + R_p)/2; reflected rays are followed while they carry at least 3% of the light.
+- **Speed:** pulses travel along each ray at c/n (optical path length); joining pulses that left together gives the wavefronts.
+- **Glass:** the index is set at 587.6 nm; other wavelengths follow a Cauchy formula fitted to crown glass (Abbe ≈ 64). The prism is dense flint (2.6× the dispersion).
+- **Lens:** a thick biconvex spherical lens (R = 10 cm, 3.4 cm thick). The focal length is checked against the lensmaker's equation; the image is where the near-axis traced rays cross. The ideal-lens prediction uses u and v from the principal planes; real spherical lenses focus a little short (aberration).
+- Illustrative only: glass thickness, glow, pulse spacing, animation speed. Not modelled: 3D effects, diffraction and interference (see Light as a wave).
+
+Tests check: Snell's law and 4% Fresnel reflectance at normal incidence, the critical angle and total internal reflection, the slab's parallel exit and (n − 1)·d delay, paraxial focus within 0.5% of the lensmaker's equation (with spherical aberration for marginal rays), prism minimum deviation recovering n, crown-glass Abbe number, and light trapped in a fibre.
 
 ## Quantum waves: scientific scope
 

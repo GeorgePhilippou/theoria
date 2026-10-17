@@ -101,7 +101,7 @@ export function createTransport({max, speed = 2, onChange}) {
 /** The concepts in their suggested order, for the "next concept" link at the end of each tour. */
 const CONCEPTS = [
   ['general-relativity', 'Curved spacetime'], ['special-relativity', 'Special relativity'],
-  ['light', 'Light as a wave'], ['quantum', 'Quantum waves'], ['entropy', 'Entropy and time’s arrow'],
+  ['light', 'Light as a wave'], ['optics', 'Rays and lenses'], ['quantum', 'Quantum waves'], ['entropy', 'Entropy and time’s arrow'],
 ];
 function nextConcept() {
   const here = location.pathname.split('/').filter(part => part && part !== 'index.html').at(-1);
