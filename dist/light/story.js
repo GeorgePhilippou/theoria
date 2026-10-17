@@ -6,9 +6,9 @@ export const steps = [
   {
     title: 'Light is a ripple of fields.',
     body: `<p>A charge shaking up and down, like the current in an antenna, tugs on the electric field around it. The disturbance spreads outward as a wave.</p>
-      <p>The surface shows the electric field: ${sw(SWATCH.up)} up one way, ${sw(SWATCH.down)} down the other. It moves at the <b>speed of light</b>, because it <b>is</b> light, just with a longer wavelength than your eyes can see.</p>`,
-    notice: 'The bracket spans one wavelength, crest to crest, measured on the live wave. Tap the surface to make a ripple of your own.',
-    maths: 'c = 1 / √(μ₀ε₀) ≈ 300 000 km/s',
+      <p>The surface shows the electric field: ${sw(SWATCH.up)} up one way, ${sw(SWATCH.down)} down the other. It moves at the <b>speed of light</b>, because it <b>is</b> light. Here the frequency is 600 THz, about 600 million million wiggles a second: green light.</p>`,
+    notice: 'The bracket is one wavelength long: its two markers ride the wave and rise and fall together. Change the frequency and the waves bunch up or stretch out.',
+    maths: 'λ = c / f:  300 000 km/s ÷ 600 THz = 500 nm',
     experiment: 'antenna', view: 'surface', layers: {ruler: true},
   },
   {
@@ -38,7 +38,7 @@ export const steps = [
   {
     eyebrow: 'Explore freely',
     title: 'Your experiment.',
-    body: `<p>Pick an experiment, change the <b>wavelength</b>, the slit gap or the glass, and tap the surface to add ripples.</p>
+    body: `<p>Pick an experiment, change the <b>frequency</b> (and so the colour), the slit gap or the glass, and tap the surface to add ripples.</p>
       <p>Switch to <b>Top</b> view to read the pattern like a map, or turn on <b>Brightness</b> to see where the light ends up.</p>`,
     experiment: 'slits', view: 'surface', layers: {arrows: false, intensity: true},
   },

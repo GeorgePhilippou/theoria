@@ -44,7 +44,7 @@
 
   <section class="readout glass" id="readout" aria-label="Measurements">
     <div class="readout-row">
-      <i class="swatch" style="--c:#ffa848"></i>
+      <i class="swatch" id="lambda-swatch" style="--c:#7cff6a"></i>
       <span class="who">Wavelength<small id="lambda-note"></small></span>
       <strong id="lambda"></strong>
     </div>
@@ -57,6 +57,11 @@
       <i class="swatch" style="--c:#7fe0f0"></i>
       <span class="who">E / cB at the arrows<small>measured live, peak over one period</small></span>
       <strong id="ratio"></strong>
+    </div>
+    <div class="legend" id="legend">
+      <div class="legend-bar"></div>
+      <div class="legend-labels"><span id="legend-lo"></span><span id="legend-mid"></span><span id="legend-hi"></span></div>
+      <p class="legend-caption" id="legend-caption"></p>
     </div>
   </section>
 
@@ -71,7 +76,7 @@
       <summary>Settings</summary>
       <label><span>Simulation speed <output id="out-rate"></output></span>
         <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Simulation speed"></label>
-      <p class="hint">The grid is about 9 wavelengths across. Tap the surface to add a ripple.</p>
+      <p class="hint">The grid is 4.3 µm across (25 nm per cell). Tap the surface to add a ripple.</p>
     </details>
   </aside>
 
@@ -87,8 +92,8 @@
       </div>
     </div>
     <div class="dock-group speed">
-      <span class="dock-label">Wavelength <output id="out-lambda"></output></span>
-      <input id="wavelength" type="range" min="14" max="34" step="1" value="20" aria-label="Wavelength">
+      <span class="dock-label">Frequency <output id="out-freq"></output></span>
+      <input id="frequency" type="range" min="400" max="750" step="5" value="600" aria-label="Frequency of the light, in terahertz">
     </div>
     <div class="dock-group speed" id="param-group">
       <span class="dock-label"><span id="param-name"></span> <output id="out-param"></output></span>
@@ -111,7 +116,11 @@
     <span class="eq">∂B/∂t = −∇ × E,   ∂E/∂t = c² ∇ × B (in vacuum)</span>
 
     <h3>Units and scale</h3>
-    <p>Lengths are in grid cells: one wavelength spans 14 to 34 of them. Everything scales, so the same picture holds for radio waves metres long or visible light half a micrometre long. The time step is half a cell’s light-crossing time, inside the method’s stability limit.</p>
+    <p>Each grid cell is 25 nm, so the frequencies on the slider (400 to 750 THz) give wavelengths of 750 to 400 nm: visible light, from red to violet, on a grid 4.3 µm across. Maxwell’s equations have no built-in length scale, so the same picture holds for radio waves metres long; only the labels would change. The time step is half a cell’s light-crossing time, inside the method’s stability limit.</p>
+    <span class="eq">wavelength λ = c / f</span>
+
+    <h3>How the views relate</h3>
+    <p><b>Surface</b> and <b>Top</b> show the same thing, the electric field at this instant: as height and colour, or as colour alone seen from above. <b>Brightness</b> shows something different: the field squared, averaged over the last few cycles, which is what a camera or an eye records. The <b>E and B arrows</b> sample the same field along one line. The <b>wavelength bracket</b> is exactly one wavelength long; its two end markers ride the wave and move in step.</p>
 
     <h3>The edges</h3>
     <p>A graded, matched conducting border absorbs outgoing waves (less than 1% returns), so the grid behaves like open space. The border is hidden.</p>
@@ -131,7 +140,7 @@
     <p class="honest">Drawn for clarity: colours (amber up, blue down) and the height scale, which adapts to the wave’s strength. With two slits, heights and brightness colours are scaled to the region behind the wall, and the far stronger wave in front of it is drawn at a fraction of its size; the screen’s brightness is scaled to its own brightest point. Because the model is 2D, it describes waves from a long line source, which fade as 1/√r rather than 1/r as in 3D, and it shows only one polarisation. The grid makes waves travel about 0.3% slower than c at the default wavelength (a known effect of the method).</p>
 
     <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/II_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume II</a> · Taflove &amp; Hagness, <em>Computational Electrodynamics</em></p>
-    <span class="version">Theoria · Light as a wave 0.3 · 2D Maxwell FDTD</span>
+    <span class="version">Theoria · Light as a wave 0.4 · 2D Maxwell FDTD</span>
   </dialog>
 </main>
 <script type="module" src="app.js"></script>

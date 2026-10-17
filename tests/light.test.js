@@ -104,3 +104,30 @@ test('two sources in step interfere: dark where paths differ by half a wavelengt
   }
   assert.ok(I(xDark, y) < .15 * I(cx, y), `dark/bright = ${I(xDark, y) / I(cx, y)}`);
 });
+
+test('retuning a running source keeps the wave smooth (no grid-scale noise)', () => {
+  // Grid-scale roughness: the second difference along a row, relative to the field itself.
+  const roughness = f => {
+    let rough = 0, total = 0;
+    for (let j = 20; j < f.ny - 20; j += 4) for (let i = 30; i < f.nx - 30; i++) {
+      const k = j * f.nx + i, d2 = f.ez[k - 1] - 2 * f.ez[k] + f.ez[k + 1];
+      rough += d2 * d2; total += f.ez[k] * f.ez[k];
+    }
+    return rough / total;
+  };
+  const run = abrupt => {
+    // An antenna (a point source), as in the app's first experiment.
+    const f = em.createField({nx: 200, ny: 200, border: 24});
+    const src = em.pointSource(100, 100, {omega: em.omegaFor(20), amp: 6});
+    f.sources.push(src);
+    for (let s = 0; s < 500; s++) f.step();
+    if (abrupt) { f.sources.length = 0; f.sources.push(em.pointSource(100, 100, {omega: em.omegaFor(30), amp: 6})); }
+    else src.retune(em.omegaFor(30));
+    for (let s = 0; s < 160; s++) f.step();
+    return roughness(f);
+  };
+  const smooth = run(false), abrupt = run(true);
+  assert.ok(smooth < abrupt / 2, `retuned ${smooth} vs abrupt ${abrupt}`);
+  // A clean wave 20 to 30 cells long has roughness of order (2π/20)⁴ ≈ 0.01; grid noise pushes it far higher.
+  assert.ok(smooth < .05, `retuned roughness ${smooth}`);
+});

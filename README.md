@@ -12,7 +12,7 @@ Source: https://github.com/GeorgePhilippou/theoria (formerly `interval-spacetime
 |---|---|---|
 | General relativity · curved spacetime | `dist/general-relativity/` | v0.4 |
 | Special relativity · moving clocks | `dist/special-relativity/` | v0.3 |
-| Light as a wave · electromagnetism | `dist/light/` | v0.3 |
+| Light as a wave · electromagnetism | `dist/light/` | v0.4 |
 | Quantum waves · quantum mechanics | `dist/quantum/` | v0.3 |
 | Entropy and the arrow of time · thermodynamics | `dist/entropy/` | v0.2 |
 

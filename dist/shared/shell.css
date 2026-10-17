@@ -434,3 +434,14 @@ dialog.notes .version { display: block; margin-top: 22px; font-size: 11px; lette
 .time-badge svg { width: 15px; height: 15px; }
 @keyframes badge-pulse { 50% { box-shadow: 0 0 22px rgba(201, 184, 255, .35); } }
 @media (max-width: 720px) { .time-badge { top: auto; bottom: calc(var(--dock-h, 140px) + 30px); white-space: nowrap; font-size: 12px; padding: 5px 12px; background: rgba(28, 22, 48, .92); } }
+
+/* A key under the readout: what colour (and height) mean in the current view */
+.legend { padding: 10px 0 4px; border-top: 1px solid rgba(255, 255, 255, .07); }
+.legend-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #2f6cf0, #0b1220 50%, #ee9a3f); }
+.legend.bright .legend-bar { background: linear-gradient(90deg, #05050c, #4d1f94 35%, #f6765a 72%, #fff2d2); }
+.legend-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+.legend-caption { margin: 6px 0 0; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+@media (max-width: 720px) {
+  .legend { flex-basis: 100%; padding: 4px 0 0; border: 0; }
+  .legend-caption { display: none; }
+}

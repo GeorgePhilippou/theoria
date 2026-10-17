@@ -106,3 +106,10 @@
 - Heat: the floor becomes a thermal map (each cell's average kT, smoothed, on a log scale from 0.25 to 2): amber on the hot side, blue on the cold, evening out as heat flows.
 - Reverse: a "Time running backwards" badge appears over the scene (above the dock on phones) while the run is reversed.
 - Physics is unchanged, and all 35 tests pass. No console errors.
+
+# Light as a wave 0.4: frequency in real units, a steady wavelength bracket (17 Oct 2026)
+
+- The grid now has a real scale, 25 nm per cell, so the control is Frequency (400 to 750 THz) and the readout gives the wavelength in nm with its colour (600 THz → 500 nm, green). The slit gap is shown in µm.
+- Changing the frequency used to replace the source abruptly; for the antenna that kicked out grid-scale noise all over the surface, and the old crest-to-crest bracket jumped between old and new waves. Sources now keep a continuous phase and glide to a new frequency over about two periods (new test: after retuning an antenna, grid-scale roughness stays low, and below half that of an abrupt switch; 36 tests pass).
+- The bracket is now steady and exactly one wavelength long (easing when the frequency changes), with two markers riding the wave at its ends that rise and fall together.
+- A key under the readout says what height and colour mean in Surface, Top and Brightness; the notes gain a "How the views relate" section.

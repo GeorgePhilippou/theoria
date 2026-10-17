@@ -89,17 +89,42 @@ export function createField({nx = 200, ny = 200, border = 24, dt = COURANT, peri
 /** Smooth start, so a switched-on source does not ring. */
 const ramp = (t, period) => Math.min(1, t / (2 * period)) ** 2;
 
+/**
+ * A steady oscillation whose frequency can be retuned while it runs. The phase is accumulated step by step, so it
+ * stays continuous, and a new frequency (`retune`) is approached smoothly over about two periods. An abrupt jump
+ * in phase or frequency would kick out a burst of grid-scale noise.
+ */
+function oscillator(omega) {
+  const osc = {omega, target: omega, phase: null, last: 0,
+    retune(w) { osc.target = w; },
+    value(t) {
+      if (osc.phase === null) osc.phase = osc.omega * t;
+      else {
+        const dt = t - osc.last, k = Math.min(1, dt * osc.omega / (4 * Math.PI));
+        osc.omega += (osc.target - osc.omega) * k;
+        osc.phase += osc.omega * dt;
+      }
+      osc.last = t;
+      return Math.sin(osc.phase);
+    },
+  };
+  return osc;
+}
+
 /** A point charge oscillating at angular frequency ω (an antenna seen end-on). */
 export function pointSource(i, j, {omega, amp = 1, phase = 0}) {
-  return {kind: 'point', i, j, omega, apply(f) {
-    f.ez[j * f.nx + i] += amp * f.dt * Math.sin(omega * f.t + phase) * ramp(f.t, 2 * Math.PI / omega);
+  const osc = oscillator(omega);
+  return {kind: 'point', i, j, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
+    const v = phase ? Math.sin(osc.omega * f.t + phase) : osc.value(f.t);
+    f.ez[j * f.nx + i] += amp * f.dt * v * ramp(f.t, 2 * Math.PI / omega);
   }};
 }
 
 /** A line of sources at column i: launches a plane wave travelling along ±x. */
 export function lineSource(i, {omega, amp = 1, from, to}) {
-  return {kind: 'line', i, omega, apply(f) {
-    const v = amp * f.dt * Math.sin(omega * f.t) * ramp(f.t, 2 * Math.PI / omega);
+  const osc = oscillator(omega);
+  return {kind: 'line', i, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
+    const v = amp * f.dt * osc.value(f.t) * ramp(f.t, 2 * Math.PI / omega);
     for (let j = from ?? 0; j < (to ?? f.ny); j++) f.ez[j * f.nx + i] += v;
   }};
 }

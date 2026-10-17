@@ -1,6 +1,6 @@
 // Light as a wave: a live Maxwell solver drawn as a glowing surface whose height is the electric field.
 import * as THREE from 'three';
-import {createStage} from '../shared/stage.js';
+import {createStage, spectrumColor} from '../shared/stage.js';
 import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
 import * as em from './physics.js';
 import {steps} from './story.js';
@@ -13,12 +13,18 @@ const RAIL = 2.4;          // height of the arrow rail above the surface
 const ARROWS = 26;         // number of E/B arrow pairs
 const COLOR = {e: 0xffc56b, b: 0x7fe0f0, glass: 0xcfe6ff, metal: 0x2a3440};
 const RATES = [.5, 1, 2, 3];
+// The grid is given a real scale: 25 nm per cell, so the waves are visible light (everything scales, see the notes).
+const NM_PER_CELL = 25, C_NM_THZ = 299792.458;   // c in nm × THz
+const lambdaNm = () => C_NM_THZ / settings.freq;
 const PARAM = {
-  slits: {name: 'Slit gap', min: 24, max: 80, step: 2, key: 'gap', format: v => `${v} cells`},
+  slits: {name: 'Slit gap', min: 24, max: 80, step: 2, key: 'gap', format: v => `${(v * NM_PER_CELL / 1000).toFixed(2)} µm`},
   lens: {name: 'Glass n', min: 1.2, max: 2.4, step: .05, key: 'n', format: v => v.toFixed(2)},
 };
 
-const settings = {experiment: 'antenna', lambda: 20, gap: 44, n: 1.5, rate: 1};
+const settings = {experiment: 'antenna', freq: 600, lambda: 20, gap: 44, n: 1.5, rate: 1};
+/** Frequency in THz sets the wavelength on the grid (in cells). */
+function setFrequency(f) { settings.freq = f; settings.lambda = C_NM_THZ / (f * NM_PER_CELL); }
+setFrequency(settings.freq);
 const layers = {arrows: false, intensity: false, ruler: false};
 const narrow = () => innerWidth <= 720;
 let heightOn = 1, targetHeight = 1, intensityMix = 0, playing = !reducedMotion, stepDebt = 0;
@@ -64,6 +70,9 @@ function materialFor(name) {
 
 function setSources() {
   const omega = em.omegaFor(settings.lambda);
+  // Same experiment, new frequency: retune the running source smoothly instead of replacing it.
+  const running = field.sources.find(s => s.kind === (settings.experiment === 'antenna' ? 'point' : 'line'));
+  if (running) { running.retune(omega); return; }
   const pulses = field.sources.filter(s => s.kind === 'pulse');
   field.sources.length = 0;
   if (settings.experiment === 'antenna') field.sources.push(em.pointSource(N / 2, N / 2, {omega, amp: 6}));
@@ -333,37 +342,33 @@ function updateTravel() {
   travelTip.set(xb + .75, RAIL + .25, z);
 }
 
-// ---------------------------------------------------------------- one wavelength, measured crest to crest on the live wave
+// ---------------------------------------------------------------- one wavelength: a steady bracket, with markers riding the wave at its ends
+// The bracket is fixed in space near the source and is exactly one wavelength long (easing when the frequency changes).
+// The two markers sit on the surface at its ends: once the new waves arrive, they rise and fall together.
 const RULER_H = 1.75;
 const ruler = stage.line({color: 0xffe2b8, width: 2, opacity: .9, segments: true, parent: group.ruler});
+const rulerEnds = [stage.sprite(0xffe2b8, .8, group.ruler), stage.sprite(0xffe2b8, .8, group.ruler)];
 const rulerMid = new THREE.Vector3();
-let rulerSpan = null;
-function updateRuler() {
-  const on = layers.ruler && (settings.experiment === 'antenna' || settings.experiment === 'plane') && heightOn > .5;
-  group.ruler.visible = on;
-  rulerSpan = null;
-  if (!on) return;
+let rulerLen = settings.lambda, rulerOn = false;
+function fieldAt(i, j) {
+  const i0 = Math.floor(i), f = i - i0, k = j * N + i0;
+  return field.ez[k] * (1 - f) + field.ez[k + 1] * f;
+}
+function updateRuler(dt) {
+  rulerOn = layers.ruler && (settings.experiment === 'antenna' || settings.experiment === 'plane') && heightOn > .5;
+  group.ruler.visible = rulerOn;
+  rulerLen += (settings.lambda - rulerLen) * Math.min(1, dt * 5);
+  if (!rulerOn) return;
   // Antenna: along the radius to the left of the source (the arrows use the right). Plane wave: a row nearer the viewer.
   const antenna = settings.experiment === 'antenna', j = antenna ? N / 2 : N / 2 - 40, dir = antenna ? -1 : 1;
-  const start = antenna ? N / 2 - Math.round(1.2 * settings.lambda) : BORDER + 40, stop = antenna ? BORDER + 6 : N - BORDER - 6;
-  let peak = 0;
-  for (let i = start; i !== stop; i += dir) peak = Math.max(peak, Math.abs(field.ez[j * N + i]));
-  if (peak < 1e-9) return;
-  const crests = [];
-  for (let i = start + dir; i !== stop - dir && crests.length < 2; i += dir) {
-    const a = field.ez[j * N + i - dir], b = field.ez[j * N + i], c = field.ez[j * N + i + dir];
-    if (b > a && b >= c && b > .4 * peak) {
-      // Refine the crest between cells with a parabola through the three samples.
-      const shift = .5 * (a - c) / (a - 2 * b + c);
-      crests.push(i + dir * (Number.isFinite(shift) ? shift : 0));
-    }
-  }
-  if (crests.length < 2) return;
-  const z = cellToWorld(0, j)[1], [x1] = cellToWorld(crests[0], 0), [x2] = cellToWorld(crests[1], 0);
-  const top = i => Math.tanh(field.ez[j * N + Math.round(i)] / scale) * surfaceMaterial.uniforms.heightScale.value;
-  ruler.set([x1, RULER_H, z, x2, RULER_H, z, x1, RULER_H, z, x1, top(crests[0]) + .05, z, x2, RULER_H, z, x2, top(crests[1]) + .05, z]);
-  rulerMid.set((x1 + x2) / 2, RULER_H + .1, z);
-  rulerSpan = Math.abs(crests[1] - crests[0]);
+  const a = antenna ? N / 2 - 22 : BORDER + 34, b = a + dir * rulerLen;
+  const z = cellToWorld(0, j)[1], [xa] = cellToWorld(a, 0), [xb] = cellToWorld(b, 0);
+  const top = i => Math.tanh(fieldAt(i, j) / scale) * surfaceMaterial.uniforms.heightScale.value;
+  const ha = top(a), hb = top(b);
+  ruler.set([xa, RULER_H, z, xb, RULER_H, z, xa, RULER_H, z, xa, ha + .1, z, xb, RULER_H, z, xb, hb + .1, z]);
+  rulerEnds[0].position.set(xa, ha + .08, z);
+  rulerEnds[1].position.set(xb, hb + .08, z);
+  rulerMid.set((xa + xb) / 2, RULER_H + .1, z);
 }
 
 // ---------------------------------------------------------------- measurements
@@ -424,6 +429,25 @@ function simulate(dtFrame) {
 }
 
 // ---------------------------------------------------------------- readout, labels, tooltip
+const swatchColor = new THREE.Color();
+function colourName(nm) {
+  return nm < 450 ? 'Violet' : nm < 485 ? 'Blue' : nm < 499 ? 'Cyan' : nm < 565 ? 'Green' : nm < 590 ? 'Yellow' : nm < 625 ? 'Orange' : 'Red';
+}
+/** The key under the readout: what height and colour mean in the current view. */
+function updateLegend() {
+  const bright = intensityMix > .5 || layers.intensity, top = targetHeight < .5;
+  const key = `${bright}|${top}`;
+  if ($('legend').dataset.key === key) return;
+  $('legend').dataset.key = key;
+  $('legend').classList.toggle('bright', bright);
+  $('legend-lo').textContent = bright ? 'dark' : 'E down';
+  $('legend-mid').textContent = bright ? '' : '0';
+  $('legend-hi').textContent = bright ? 'bright' : 'E up';
+  $('legend-caption').textContent = bright
+    ? 'Colour: brightness, the average of E² over the last few cycles. This is what a screen or an eye would register.'
+    : top ? 'Seen from above: colour is the electric field at this instant. Crests are amber, troughs blue.'
+      : 'Height and colour: the electric field at this instant. The wave moves; the pattern of crests is the light.';
+}
 const labelPoint = new THREE.Vector3();
 function lensFocus() {
   if (!lens) return null;
@@ -433,9 +457,11 @@ function lensFocus() {
   return x0 + t / 2 + back;
 }
 function updateReadout() {
-  const lambdaWorld = settings.lambda * CELL;
-  $('lambda').textContent = `${settings.lambda} cells`;
-  $('lambda-note').textContent = `period ${(2 * settings.lambda).toFixed(0)} time steps · ${(lambdaWorld).toFixed(1)} on the grid`;
+  const nm = lambdaNm();
+  $('lambda').textContent = `${Math.round(nm)} nm`;
+  $('lambda-note').textContent = `${colourName(nm)} light · frequency ${settings.freq} THz`;
+  $('lambda-swatch').style.setProperty('--c', `#${spectrumColor(nm, swatchColor).getHexString()}`);
+  updateLegend();
   $('speed').textContent = lens ? `c / ${settings.n.toFixed(2)}` : 'c';
   $('speed-note').textContent = lens ? `in the glass: ${(1 / settings.n).toFixed(2)} c · in air: c` : 'the same in every direction';
   $('row-ratio').hidden = !layers.arrows;
@@ -447,8 +473,8 @@ function updateLabels() {
   pin('label-e', arrowTips.e, layers.arrows);
   pin('label-b', arrowTips.b, layers.arrows);
   pin('label-travel', travelTip, layers.arrows);
-  $('label-ruler-text').textContent = rulerSpan ? `one wavelength · ${rulerSpan.toFixed(0)} cells` : '';
-  pin('label-ruler', rulerMid, !!rulerSpan);
+  $('label-ruler-text').textContent = `one wavelength · ${Math.round(lambdaNm())} nm`;
+  pin('label-ruler', rulerMid, rulerOn);
   pin('label-screen', screenTop, group.screen.visible);
   if (lens) {
     const [x, z] = cellToWorld(lens.x0, cy - lens.a - 4);
@@ -547,9 +573,9 @@ function setView(top, announce = false) {
 }
 function updateControls() {
   for (const b of document.querySelectorAll('[data-experiment]')) setPressed(b, b.dataset.experiment === settings.experiment);
-  $('out-lambda').textContent = `${settings.lambda} cells`;
-  $('wavelength').value = settings.lambda;
-  $('wavelength').style.setProperty('--progress', `${(settings.lambda - 14) / 20 * 100}%`);
+  $('out-freq').textContent = `${settings.freq} THz`;
+  $('frequency').value = settings.freq;
+  $('frequency').style.setProperty('--progress', `${(settings.freq - 400) / 350 * 100}%`);
   const p = PARAM[settings.experiment];
   $('param-group').hidden = !p;
   if (p) {
@@ -578,8 +604,8 @@ $('view-top').onclick = () => setView(true, true);
 $('reset-camera').onclick = () => setFraming(targetHeight > .5 ? 'surface' : 'top');
 for (const b of document.querySelectorAll('[data-experiment]')) b.onclick = () => chooseExperiment(b.dataset.experiment);
 for (const chip of document.querySelectorAll('.chip')) chip.onclick = () => { layers[chip.dataset.layer] = !layers[chip.dataset.layer]; applyLayers(); };
-// Wavelength, slit gap and glass index change live, without clearing the waves already travelling.
-$('wavelength').addEventListener('input', e => { settings.lambda = +e.target.value; setSources(); ratioWindow.value = null; updateControls(); });
+// Frequency, slit gap and glass index change live, without clearing the waves already travelling.
+$('frequency').addEventListener('input', e => { setFrequency(+e.target.value); setSources(); ratioWindow.value = null; updateControls(); });
 $('param').addEventListener('input', e => {
   const p = PARAM[settings.experiment];
   settings[p.key] = +e.target.value;
@@ -643,7 +669,7 @@ function frame(time) {
   group.props.scale.y = .25 + .75 * heightOn;
   writeTexture();
   if (layers.arrows) { updateArrows(); updateTravel(); }
-  updateRuler();
+  updateRuler(dt);
   updateSource();
   updateScreen();
 
@@ -668,5 +694,5 @@ requestAnimationFrame(frame);
 
 // With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__light = {field, settings, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; intensityMix = layers.intensity ? 1 : 0; }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
+  window.__light = {field, settings, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; intensityMix = layers.intensity ? 1 : 0; rulerLen = settings.lambda; }, setFrequency(f) { setFrequency(f); setSources(); updateControls(); }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
 }
