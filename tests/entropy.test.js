@@ -96,3 +96,21 @@ test('heat flows from hot to cold, with the textbook entropy gain', () => {
   // A 2D ideal gas with equal halves: ΔS/N = ln(T_f / √(T_hot T_cold)).
   close(gain, Math.log(tf / Math.sqrt(hot * cold)), .08, 'entropy gain');
 });
+
+test('walls lifted and lowered mid-run still reverse exactly, and a gap lets atoms through', () => {
+  const gas = gasLib.experiment('spread', {n: 120, seed: 4});
+  gas.step(400);
+  gas.walls.push({x: gas.width * .75, from: gas.index, until: gas.index + 300, gap: [5, 9]});
+  const start = gas.save();
+  gas.step(900);
+  gas.reverse();
+  gas.step(900);
+  gas.reverse();
+  for (let i = 0; i < gas.n; i++) { assert.equal(gas.x[i], start.x[i]); assert.equal(gas.y[i], start.y[i]); }
+  // A wall with a gap: atoms leak from left to right through it.
+  const g2 = gasLib.experiment('spread', {n: 150, seed: 2});
+  g2.walls[0].until = Infinity; g2.walls[0].gap = [6, 8];
+  g2.step(3000);
+  const left = gasLib.leftFraction(g2);
+  assert.ok(left < .97 && left > .5, `some atoms got through the gap: ${left}`);
+});

@@ -60,15 +60,20 @@ export function createGas({n = 400, width = 24, height = 14, radius = .16, k = 4
         }
       }
     }
-    const wall = kick * UNIT, half = W / 2, partition = index < gas.partitionUntil;
+    const wall = kick * UNIT;
+    // Inner walls stand for a range of step indices, so the whole history (walls included) runs backwards exactly.
+    const active = gas.walls.filter(w => index >= w.from && index < w.until).map(w => ({
+      x: Math.round(w.x / UNIT), gap: w.gap && [Math.round(w.gap[0] / UNIT), Math.round(w.gap[1] / UNIT)],
+    }));
     for (let i = 0; i < n; i++) {
       if (x[i] < R) ax[i] += Math.round((R - x[i]) * wall);
       if (x[i] > W - R) ax[i] -= Math.round((x[i] - W + R) * wall);
       if (y[i] < R) ay[i] += Math.round((R - y[i]) * wall);
       if (y[i] > H - R) ay[i] -= Math.round((y[i] - H + R) * wall);
-      if (partition) {
-        if (x[i] < half && x[i] > half - R) ax[i] -= Math.round((x[i] - half + R) * wall);
-        else if (x[i] >= half && x[i] < half + R) ax[i] += Math.round((half + R - x[i]) * wall);
+      for (const w of active) {
+        if (w.gap && y[i] > w.gap[0] && y[i] < w.gap[1]) continue;
+        if (x[i] < w.x && x[i] > w.x - R) ax[i] -= Math.round((x[i] - w.x + R) * wall);
+        else if (x[i] >= w.x && x[i] < w.x + R) ax[i] += Math.round((w.x + R - x[i]) * wall);
       }
     }
   }
@@ -78,9 +83,19 @@ export function createGas({n = 400, width = 24, height = 14, radius = .16, k = 4
     /** Step counter; it counts down while time runs backwards. */
     index: 0,
     direction: 1,
-    partitionUntil: -Infinity,
+    /** Inner walls: {x, from, until (step indices), gap: [y0, y1] or null}. */
+    walls: [],
+    /** The middle wall of the classic experiments stands until this step index. */
+    get partitionUntil() { return gas.walls.find(w => w.middle)?.until ?? -Infinity; },
+    set partitionUntil(index) {
+      const w = gas.walls.find(v => v.middle);
+      if (w) w.until = index; else gas.walls.push({x: width / 2, from: -Infinity, until: index, gap: null, middle: true});
+    },
     get t() { return gas.index * dt; },
-    get partitioned() { return gas.index < gas.partitionUntil; },
+    get partitioned() { return gas.walls.some(w => gas.index >= w.from && gas.index < w.until); },
+    /** Copies of the whole state, so a recording can be replayed (this is a recording, not physics). */
+    save() { return {x: x.slice(), y: y.slice(), vx: vx.slice(), vy: vy.slice(), index: gas.index, direction: gas.direction, walls: gas.walls.map(w => ({...w}))}; },
+    load(st) { x.set(st.x); y.set(st.y); vx.set(st.vx); vy.set(st.vy); gas.index = st.index; gas.direction = st.direction; gas.walls = st.walls.map(w => ({...w})); gas.refresh(); },
     step(count = 1) {
       for (let s = 0; s < count; s++) {
         accelerate(gas.index);
@@ -188,12 +203,15 @@ export function experiment(kind, {n = 400, seed = 1, kT = 1, width = 24, height 
     place(gas, left, n, [half, 0, width, height], rand);
     launch(gas, 0, left, {kT: HOT}, rand);
     launch(gas, left, n, {kT: COLD}, rand);
+  } else if (kind === 'even') {
+    place(gas, 0, n, [0, 0, width, height], rand);
+    launch(gas, 0, n, {kT}, rand);
   } else {
     place(gas, 0, n, [0, 0, width, height], rand);
     launch(gas, 0, n, {speed: Math.sqrt(2 * kT)}, rand);
   }
   for (let i = 0; i < n; i++) gas.origin[i] = gas.x[i] * UNIT < half ? 0 : 1;
-  if (kind !== 'speeds') {
+  if (kind === 'spread' || kind === 'heat') {
     gas.partitionUntil = Math.round(LIFT_TIME / gas.dt);
     const settle = 500;
     gas.index = -settle;
