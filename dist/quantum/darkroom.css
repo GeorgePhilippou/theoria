@@ -1,0 +1,117 @@
+/* Quantum waves: the particle darkroom. Halftone prints of the wave, a photographic plate with sprocket holes
+   where particles land one by one, an emitter bar, and an exposure log. Calm: nothing flashes. */
+@font-face { font-family: Inter; src: url('../fonts/InterVariable.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url('../fonts/SpaceMono-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Space Mono'; src: url('../fonts/SpaceMono-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+
+:root {
+  --paper: #ece4d2; --print: #f2ebdc; --olive: #56612a; --olive-dark: #3b4419; --spot: #c8541f; --spot-tint: #e9b99a; --olive-tint: #c9c9a3;
+  --ink: #2f3614; --ink-2: #454d22; --ink-3: #6a6f45; --ink-4: #8a8c68; --film: #3a3d26; --rule: rgba(86, 97, 42, .3);
+  --sans: Inter, system-ui, -apple-system, sans-serif; --mono: 'Space Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--paper); color: var(--ink); font: 450 13px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+.cap { font: 700 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+
+.room { display: grid; height: 100dvh; grid-template-columns: minmax(0, 1fr) 132px 360px; grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'top top top' 'chamber plate log' 'emitter emitter log'; }
+
+/* ------------------------------------------------------------ top */
+.top { grid-area: top; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 10px 18px; }
+.mark { text-decoration: none; color: var(--ink); display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.mark b { font-weight: 800; letter-spacing: .2em; font-size: 13px; }
+.mark span { color: var(--ink-3); font-size: 12.5px; font-style: italic; }
+.pill {
+  border: 1px solid var(--ink-3); background: var(--print); padding: 5px 12px; border-radius: 999px; cursor: pointer; font-weight: 600;
+  font-size: 12px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.pill:hover { border-color: var(--ink); }
+.pill.on, .pill[aria-pressed=true] { background: var(--olive-dark); border-color: var(--olive-dark); color: var(--print); }
+.pill.fire { background: var(--spot); border-color: var(--spot); color: #fff; font-weight: 700; }
+.pill.fire:hover { background: #b14a1b; }
+.pill:focus-visible { outline: 2px solid var(--spot); outline-offset: 2px; }
+.pills { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.next { color: var(--ink-2); font-weight: 600; text-decoration: none; border-bottom: 1.5px solid var(--spot); white-space: nowrap; font-size: 12px; }
+
+/* ------------------------------------------------------------ chamber and plate: prints with a deckled shadow */
+.print { position: relative; background: var(--print); box-shadow: 0 1px 0 rgba(47,54,20,.25), 0 8px 18px -10px rgba(47,54,20,.45); border-radius: 2px; }
+.chamber { grid-area: chamber; padding: 4px 10px 8px 18px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.chamber .print { flex: 1; min-height: 0; }
+.print canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.caption { margin: 0; color: var(--ink-3); font-size: 12px; font-style: italic; }
+.plate { grid-area: plate; padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.plate .film { flex: 1; min-height: 0; position: relative; background: var(--film); border-radius: 3px; padding: 0 14px; }
+.plate .film::before, .plate .film::after {
+  content: ''; position: absolute; top: 6px; bottom: 6px; width: 7px;
+  background: repeating-linear-gradient(to bottom, var(--paper) 0 7px, transparent 7px 16px); border-radius: 2px;
+}
+.plate .film::before { left: 4px; } .plate .film::after { right: 4px; }
+.plate .film .print { position: absolute; inset: 0 14px; border-radius: 0; }
+.plate p { margin: 0; text-align: center; }
+.count { font: 700 18px var(--mono); color: var(--ink); text-align: center; line-height: 1; }
+
+/* ------------------------------------------------------------ emitter bar */
+.emitter { grid-area: emitter; display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; padding: 10px 18px 14px; border-top: 1px solid var(--rule); }
+.emitter label { display: grid; gap: 1px; font-size: 12px; font-weight: 600; color: var(--ink-2); min-width: 150px; }
+.emitter label span { display: flex; justify-content: space-between; gap: 8px; }
+.emitter output { font-family: var(--mono); }
+input[type=range] { accent-color: var(--spot); width: 100%; }
+.sep { width: 1px; align-self: stretch; background: var(--rule); }
+
+/* ------------------------------------------------------------ exposure log */
+.log { grid-area: log; overflow-y: auto; padding: 4px 18px 20px 12px; display: flex; flex-direction: column; gap: 14px; }
+.exposures { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.exposures .pill { justify-content: flex-start; border-radius: 4px; padding: 6px 9px; }
+.exposures .pill i { font: 700 10px var(--mono); font-style: normal; color: var(--spot); }
+.exposures .pill.on i { color: var(--spot-tint); }
+.notes { background: var(--print); padding: 14px 16px; border-radius: 2px; box-shadow: 0 1px 0 rgba(47,54,20,.25), 0 8px 18px -12px rgba(47,54,20,.4); }
+.notes h1 { font-size: 17px; line-height: 1.25; margin: 0 0 8px; font-weight: 800; }
+.notes p { margin: 0 0 8px; color: var(--ink-2); }
+.formula { font: 700 13px var(--mono); text-align: center; padding: 7px; border-top: 1px solid var(--ink-3); border-bottom: 1px solid var(--ink-3); margin: 6px 0 10px; }
+.formula small { display: block; font: italic 500 11px var(--sans); color: var(--ink-3); margin-top: 2px; }
+.try { margin: 0; padding: 0; list-style: none; }
+.try li { padding-left: 16px; position: relative; margin-bottom: 4px; color: var(--ink-2); }
+.try li::before { content: '•'; position: absolute; left: 3px; color: var(--spot); }
+.insight { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--ink-4); }
+.insight:empty { display: none; }
+.insight b { font-family: var(--mono); color: var(--spot); }
+.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.tools .pill { justify-content: center; border-radius: 4px; }
+.hint { color: var(--ink-3); font-size: 12px; margin: 6px 0 0; }
+.orbitals { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.tip { position: fixed; left: 0; top: 0; z-index: 10; pointer-events: none; max-width: 260px; opacity: 0; transition: opacity .12s;
+  background: var(--print); border: 1px solid var(--ink-3); padding: 7px 10px; font-size: 12px; line-height: 1.45; border-radius: 3px; box-shadow: 0 6px 16px -8px rgba(47,54,20,.5); }
+.tip.visible { opacity: 1; }
+.tip b { display: block; }
+
+dialog.about {
+  max-width: 640px; width: calc(100% - 32px); max-height: calc(100dvh - 48px); border: 0; background: var(--print); color: var(--ink);
+  padding: 22px 24px; font: inherit; border-radius: 3px; box-shadow: 0 20px 60px rgba(47,54,20,.35);
+}
+dialog.about::backdrop { background: rgba(47, 54, 20, .35); }
+dialog.about h2 { font-size: 18px; margin: 0 0 10px; font-weight: 800; }
+dialog.about h3 { font: 700 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; margin: 16px 0 4px; color: var(--ink-3); }
+dialog.about p { margin: 0 0 8px; color: var(--ink-2); }
+dialog.about .eq { display: block; text-align: center; font: 700 13px var(--mono); border-top: 1px solid var(--ink-3); border-bottom: 1px solid var(--ink-3); padding: 6px; margin: 8px 0; }
+dialog.about .close { float: right; }
+dialog.about .honest { border-left: 3px solid var(--spot); padding-left: 10px; }
+
+@media (max-width: 1000px) {
+  .room { display: flex; flex-direction: column; height: auto; min-height: 100dvh; }
+  .chamber { padding: 4px 12px 6px; }
+  .chamber .print { flex: none; aspect-ratio: 2; }
+  .plate { padding: 4px 12px; }
+  .plate .film { flex: none; height: 96px; padding: 12px 0; }
+  .plate .film::before, .plate .film::after { top: 3px; bottom: auto; left: 6px; right: 6px; width: auto; height: 6px;
+    background: repeating-linear-gradient(to right, var(--paper) 0 7px, transparent 7px 16px); }
+  .plate .film::after { top: auto; bottom: 3px; }
+  .plate .film .print { inset: 12px 0; }
+  .emitter { padding: 8px 12px; }
+  .log { padding: 4px 12px 20px; overflow: visible; }
+  .wide-only { display: none !important; }
+}

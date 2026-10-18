@@ -64,3 +64,40 @@ test('orbitals 1s and 2s are orthogonal; 2p has a node in its plane', () => {
   close(p(1, 1, 0), 0, 1e-12, 'pz vanishes at z = 0');
   assert.ok(p(0, 0, 2) > 0 && p(0, 0, -2) < 0, 'opposite signs on the two lobes');
 });
+
+test('a measurement finds the particle with the Born probability, and collapses the wave', () => {
+  const w = q.createWave({nx: 64, ny: 64, lx: 64, ly: 64, absorb: 0});
+  w.setPacket({x0: 0, y0: 0, sx: 4, sy: 4});
+  const right = x => x > 0, before = w.probability(right);
+  const yes = w.collapse(right, 0);
+  close(yes.p, before, 1e-12, 'the Born probability of the region');
+  assert.ok(yes.p > .4 && yes.p < .5, 'about half the packet is on the right');
+  close(w.probability(right), 1, 1e-9, 'found: all of it is there now');
+  w.setPacket({x0: 0, y0: 0, sx: 4, sy: 4});
+  const no = w.collapse(right, .99);
+  assert.equal(no.found, false);
+  close(w.probability(right), 0, 1e-12, 'not found: none of it is there');
+  close(w.norm(), 1, 1e-9);
+});
+
+test('sampling follows the weights', () => {
+  const weights = [0, 1, 3, 0], counts = [0, 0, 0, 0];
+  for (let k = 0; k < 4000; k++) counts[q.sampleIndex(weights, (k + .5) / 4000)]++;
+  assert.equal(counts[0] + counts[3], 0);
+  close(counts[2] / counts[1], 3, .01);
+  assert.equal(q.sampleIndex([0, 0]), -1);
+});
+
+test('a packet in a harmonic well swings back after one period without spreading', () => {
+  const omega = .2, w = q.createWave({nx: 128, ny: 64, lx: 96, ly: 48, dt: .1, absorb: 0});
+  w.setPotential(q.harmonic(omega));
+  const s = 1 / Math.sqrt(2 * omega);
+  w.setPacket({x0: -12, y0: 0, sx: s, sy: s});
+  const steps = Math.round(2 * Math.PI / omega / w.dt);
+  for (let n = 0; n < steps / 2; n++) w.step();
+  close(w.statsX().mean, 12, .3, 'half a period: on the other side');
+  for (let n = 0; n < steps / 2; n++) w.step();
+  const st = w.statsX();
+  close(st.mean, -12, .3, 'back where it started');
+  close(st.sd, s, .05, 'same width: a coherent state');
+});

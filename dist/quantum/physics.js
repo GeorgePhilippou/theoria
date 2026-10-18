@@ -172,6 +172,19 @@ export function createWave({nx = 256, ny = 256, lx = 128, ly = 128, dt = .2, abs
     m /= p;
     return {mean: m, sd: Math.sqrt(m2 / p - m * m)};
   };
+  /**
+   * A measurement asking "is the particle in this region?" (fn(x, y) true inside). With probability p it is found
+   * there and the wave outside is removed; otherwise the wave inside is removed. Either way the result is
+   * renormalised. `u` is a uniform random number in [0, 1). Returns {p, found}.
+   */
+  wave.collapse = (fn, u = Math.random()) => {
+    const p = wave.probability(fn), found = u < p;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      if (fn(xAt(i), yAt(j)) !== found) { const k = j * nx + i; re[k] = 0; im[k] = 0; }
+    }
+    if (wave.norm() > 0) wave.normalise();
+    return {p, found};
+  };
   return wave;
 }
 
@@ -251,3 +264,16 @@ export function orbital(name) {
 
 /** Expected radius ⟨r⟩ = (3n² − l(l+1)) / 2 in Bohr radii. */
 export const meanRadius = (n, l) => (3 * n * n - l * (l + 1)) / 2;
+
+/** Index drawn at random from non-negative weights (u uniform in [0, 1)), or −1 if they are all zero. */
+export function sampleIndex(weights, u = Math.random()) {
+  let total = 0;
+  for (const w of weights) total += w;
+  if (!(total > 0)) return -1;
+  let target = u * total;
+  for (let i = 0; i < weights.length; i++) { target -= weights[i]; if (target < 0) return i; }
+  return weights.length - 1;
+}
+
+/** Harmonic potential ½ ω² r² centred on the origin; its ground state has |ψ|² width σ = 1/√(2ω). */
+export const harmonic = omega => (x, y) => .5 * omega * omega * (x * x + y * y);

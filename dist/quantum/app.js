@@ -1,638 +1,423 @@
-// Quantum waves: a live Schrödinger solver drawn as a phase-coloured probability surface,
-// plus exact hydrogen orbitals as clouds of sampled positions.
-import * as THREE from 'three';
-import {createStage, INK} from '../shared/stage.js';
-import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
+// Quantum waves: the particle darkroom. A live Schrödinger solver printed as halftone dots, an emitter that fires one
+// particle (one wave) at a time, and a photographic plate where each is found at a single place by the Born rule.
 import * as q from './physics.js';
-import {steps} from './story.js';
+import {exposures, WALL} from './scenarios.js';
 
+const $ = id => document.getElementById(id);
 const NX = 256, NY = 128, LX = 128, LY = 64, DX = LX / NX, ABSORB = 16;
-const S = .18;                         // world units per simulation unit
-const WX = LX * S, WZ = LY * S;        // world size of the grid
-const HEIGHT = 2.1;                    // surface height for the peak
-const E_SCALE = .9;                    // world height per unit of energy (barrier and energy line)
-const DETECTOR_X = 44, MAX_DOTS = 2400;
-const RATES = [.5, 1, 2, 3];
-const PARAM = {
-  packet: {name: 'Momentum k', min: .6, max: 2.4, step: .05, key: 'k', format: v => v.toFixed(2)},
-  slits: {name: 'Slit gap', min: 6, max: 20, step: .5, key: 'gap', format: v => `${v.toFixed(1)} units`},
-  tunnel: {name: 'Barrier V₀', min: .4, max: 3, step: .05, key: 'V0', format: v => v.toFixed(2)},
+const PLATE = 44, SX = 6, T_MAX = 150, AUTO = 5;   // Keep firing sends five identical particles per wave
+const C = {ink: '#2f3614', ink3: '#6a6f45', ink4: '#8a8c68', olive: '#56612a', oliveDark: '#3b4419', spot: '#c8541f', tint: '#c9c9a3', print: '#f2ebdc', film: '#3a3d26'};
+const HINTS = {
+  move: 'Drag the emitter to move it; drag the tip of its arrow to aim it and set its momentum.',
+  look: 'Click in the chamber to look inside the circle: the particle is found there, or that part of the wave vanishes.',
+  wall: 'Drag to paint a wall the particle cannot pass.',
+  barrier: 'Drag to paint a barrier of the height below: low enough to tunnel through.',
+  erase: 'Drag to rub out walls and barriers.',
 };
-// Paper palette: barrier olive, energy burnt orange, detections dark ink; orbital signs orange (+) and olive (−).
-// The wave's phase keeps its colour wheel: there the hue is the physics.
-const COLOR = {barrier: INK.oliveTint, energy: INK.spot, dot: INK.dark, plus: INK.spot, minus: INK.olive};
 
-const settings = {experiment: 'packet', k: 1.4, gap: 12, V0: 1.6, orbital: '2p', rate: 1};
-const layers = {phase: true, detector: false};
-const narrow = () => innerWidth <= 720;
-let heightOn = 1, targetHeight = 1, playing = !reducedMotion, stepDebt = 0;
-
-// ---------------------------------------------------------------- stage
-const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
-  viewShift: () => {
-    if (!narrow()) return [24, 0];
-    const top = $('story').getBoundingClientRect().bottom;
-    const below = [$('readout'), $('transport')].find(el => el.offsetParent);
-    return [0, Math.round((top + below.getBoundingClientRect().top) / 2 - innerHeight / 2)];
-  },
-});
-const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 4, maxDistance: 110});
-const group = {wave: new THREE.Group(), props: new THREE.Group(), dots: new THREE.Group(), atom: new THREE.Group()};
-for (const g of Object.values(group)) scene.add(g);
-
-const toWorld = (x, y, h = 0) => [x * S, h, -y * S];
-const cellOf = (x, y) => [Math.round(x / DX + NX / 2), Math.round(y / DX + NY / 2)];
-
-// ---------------------------------------------------------------- simulation
+// ---------------------------------------------------------------- state
 const wave = q.createWave({nx: NX, ny: NY, lx: LX, ly: LY, dt: .2, absorb: ABSORB});
-const SLIT = {half: .75, width: 2.2, height: 6};
-const BARRIER_A = 1;
-let ampScale = 1e-3, tunnelBest = 0, tunnelLast = null, launches = 0;
-
-function potentialFor(name) {
-  if (name === 'slits') {
-    const {half, width, height} = SLIT, s = settings.gap / 2;
-    return (x, y) => Math.abs(x) < half && Math.abs(y - s) > width / 2 && Math.abs(y + s) > width / 2 ? height : 0;
-  }
-  if (name === 'tunnel') return x => x >= 0 && x < BARRIER_A ? settings.V0 : 0;
-  return () => 0;
-}
-function launch() {
-  const name = settings.experiment;
-  found = null;
-  if (name === 'packet') wave.setPacket({x0: -28, y0: 0, kx: settings.k, sx: 5, sy: 5});
-  if (name === 'slits') wave.setPacket({x0: -36, y0: 0, kx: 2, sx: 5, sy: 12});
-  if (name === 'tunnel') wave.setPacket({x0: -30, y0: 0, kx: 1.5, sx: 6, sy: 7});
-  if (tunnelBest > .001) tunnelLast = tunnelBest;
-  tunnelBest = 0;
-  launches++;
-}
-function setupExperiment(restart = true) {
-  const name = settings.experiment, isAtom = name === 'atom';
-  group.wave.visible = group.props.visible = !isAtom;
-  group.atom.visible = isAtom;
-  group.dots.visible = !isAtom && layers.detector && name === 'slits';
-  controls.autoRotate = isAtom && !reducedMotion;
-  if (restart) tunnelLast = null;
-  if (isAtom) buildAtom();
-  else {
-    wave.setPotential(potentialFor(name));
-    if (restart) { launch(); clearDots(); }
-    buildProps();
-  }
-  updateControls();
-}
-
-// ---------------------------------------------------------------- the probability surface
-const texture = new THREE.DataTexture(new Uint8Array(NX * NY * 4), NX, NY, THREE.RGBAFormat);
-texture.magFilter = texture.minFilter = THREE.LinearFilter;
-const surfaceGeometry = new THREE.PlaneGeometry(WX - DX * S, WZ - DX * S, NX - 1, NY - 1);
-surfaceGeometry.rotateX(-Math.PI / 2);
-{
-  const p = surfaceGeometry.attributes.position, uv = surfaceGeometry.attributes.uv;
-  for (let k = 0; k < p.count; k++) uv.setXY(k, (p.getX(k) + WX / 2) / WX, (-p.getZ(k) + WZ / 2) / WZ);
-}
-const surfaceMaterial = new THREE.ShaderMaterial({
-  transparent: true, side: THREE.DoubleSide,
-  uniforms: {
-    map: {value: texture}, texel: {value: new THREE.Vector2(1 / NX, 1 / NY)}, cell: {value: DX * S},
-    heightScale: {value: HEIGHT}, phaseMix: {value: 1}, edge: {value: new THREE.Vector2(ABSORB / NX, ABSORB / NY)},
-    size: {value: new THREE.Vector2(LX, LY)},
-    light: {value: new THREE.Vector3(.35, 1, .5).normalize()},
+const paint = new Float64Array(NX * NY);           // painted walls and barriers, on top of the exposure's own potential
+let baseV = () => 0;
+const plateAcc = new Float64Array(NY);
+const lab = {
+  exp: null, k: 1.4, width: 5, V0: 1.6, speed: 2, playing: true, tool: 'move', crests: false, auto: false,
+  emitter: {x: -40, y: 0, angle: 0}, detections: [], jitter: [], fired: 0, run: null, lastProfile: null, orbital: '2p', atomDots: [],
+  PLATE, SX,
+  base(fn) { baseV = fn; },
+  plateWidth() {
+    const p = this.lastProfile;
+    if (!p) return 0;
+    let s = 0, m = 0, m2 = 0;
+    p.forEach((w, j) => { const y = wave.yAt(j); s += w; m += w * y; m2 += w * y * y; });
+    return s ? Math.sqrt(m2 / s - (m / s) ** 2) : 0;
   },
-  vertexShader: `
-    uniform sampler2D map; uniform vec2 texel; uniform float cell, heightScale;
-    varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying vec4 vData;
-    float h(vec2 uv) { return pow(texture2D(map, uv).r, 1.4); }
-    void main() {
-      vUv = uv;
-      vData = texture2D(map, uv);
-      vec3 p = position;
-      p.y += h(uv) * heightScale;
-      float hl = h(uv - vec2(texel.x, 0.0)), hr = h(uv + vec2(texel.x, 0.0));
-      float hd = h(uv - vec2(0.0, texel.y)), hu = h(uv + vec2(0.0, texel.y));
-      vec3 n = normalize(vec3((hl - hr) * heightScale / (2.0 * cell), 1.0, (hu - hd) * heightScale / (2.0 * cell)));
-      vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      vView = normalize(-mv.xyz);
-      vNormal = normalize(normalMatrix * n);
-      gl_Position = projectionMatrix * mv;
-    }`,
-  fragmentShader: `
-    uniform float phaseMix; uniform vec2 edge, size; uniform vec3 light;
-    varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying vec4 vData;
-    vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }
-    void main() {
-      vec2 d2 = min(vUv, 1.0 - vUv) - edge;
-      float alpha = smoothstep(0.0, 0.03, min(d2.x * 0.5, d2.y));
-      if (alpha <= 0.0) discard;
-      float a = vData.r;
-      float phase = atan(vData.b * 2.0 - 1.0, vData.g * 2.0 - 1.0) / 6.2831853 + 0.5;
-      // An empty region is paper with a faint olive grid, 8 units apart, that fades where the wave is.
-      vec2 q = vUv * size / 8.0;
-      vec2 g = abs(fract(q - 0.5) - 0.5) / fwidth(q);
-      float grid = 1.0 - min(min(g.x, g.y), 1.0);
-      vec3 dark = mix(vec3(0.93, 0.89, 0.82), vec3(0.34, 0.38, 0.16), grid * 0.35);
-      vec3 hue = hsv(phase, 0.62, 0.84);
-      vec3 plain = vec3(0.34, 0.38, 0.16);
-      vec3 base = mix(dark, mix(plain, hue, phaseMix), smoothstep(0.0, 0.9, pow(a, 0.75)));
-      vec3 n = normalize(vNormal);
-      vec3 l = normalize((viewMatrix * vec4(light, 0.0)).xyz);
-      float diff = max(dot(n, l), 0.0);
-      float spec = pow(max(dot(reflect(-l, n), vView), 0.0), 40.0);
-      vec3 color = base * (0.74 + 0.34 * diff) + spec * 0.06 * smoothstep(0.05, 0.4, a);
-      if (vData.a > 0.5) color = mix(color, vec3(0.73, 0.73, 0.56), 0.4);
-      // Colours above are written in display (sRGB) terms; convert to linear for the renderer.
-      gl_FragColor = vec4(pow(max(color, 0.0), vec3(2.2)), alpha);
-    }`,
-});
-group.wave.add(new THREE.Mesh(surfaceGeometry, surfaceMaterial));
-{
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WX * 1.4, WZ * 1.8), new THREE.MeshBasicMaterial({color: INK.paper}));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -.05;
-  group.wave.add(floor);
-  // A faint rim round the simulated region (the absorbing margin outside it is hidden).
-  const x = (LX / 2 - ABSORB * DX) * S, z = (LY / 2 - ABSORB * DX) * S;
-  stage.line({color: INK.olive, width: 1.4, opacity: .7, parent: group.wave}).set([-x, .01, -z, x, .01, -z, x, .01, z, -x, .01, z, -x, .01, -z]);
-}
+  waveTime() { return wave.t; },
+};
+function applyPotential() { wave.setPotential((x, y) => baseV(x, y) + paint[cellIndex(x, y)]); }
+const cellIndex = (x, y) => Math.min(NY - 1, Math.max(0, Math.round(y / DX + NY / 2))) * NX + Math.min(NX - 1, Math.max(0, Math.round(x / DX + NX / 2)));
 
-// ---------------------------------------------------------------- props: walls, barrier, energy line, detector screen
-const barrierMaterial = new THREE.MeshStandardMaterial({color: COLOR.barrier, transparent: true, opacity: .6, roughness: .9, metalness: 0, depthWrite: false});
-const energyLine = stage.line({color: COLOR.energy, width: 2, opacity: .9, dashed: true, dash: [.18, .12], parent: group.props});
-const zMin = -(LY / 2 - ABSORB * DX) * S, zMax = -zMin;
-function box(x0, x1, y0, y1, h) {
-  const [ax, , az] = toWorld(x0, y0), [bx, , bz] = toWorld(x1, y1);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(bx - ax), h, Math.abs(bz - az)), barrierMaterial);
-  mesh.position.set((ax + bx) / 2, h / 2, (az + bz) / 2);
-  group.props.add(mesh);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color: INK.olive, transparent: true, opacity: 1}));
-  edges.position.copy(mesh.position);
-  group.props.add(edges);
+/** Fires one particle: a fresh wave packet from the emitter. `count` particles are detected from this one wave. */
+function fire(count = 1) {
+  if (lab.exp.atom) { look(count); return; }
+  const {x, y, angle} = lab.emitter, a = angle * Math.PI / 180;
+  const sx = lab.exp.omega ? lab.width : SX;
+  wave.setPacket({x0: x, y0: y, kx: lab.k * Math.cos(a), ky: lab.k * Math.sin(a), sx, sy: lab.width});
+  if (Math.abs(a) > 1e-6 && !lab.exp.omega) rotatePacket(x, y, a, sx);
+  plateAcc.fill(0);
+  lab.run = {count, start: performance.now()};
+  setPlaying(true);
 }
-const screen = new THREE.Mesh(new THREE.PlaneGeometry(zMax - zMin, 1.9), new THREE.MeshStandardMaterial({
-  color: INK.paper2, transparent: true, opacity: .95, side: THREE.DoubleSide, roughness: .9,
-}));
-screen.rotation.y = Math.PI / 2;
-screen.position.set(DETECTOR_X * S + .02, .95, 0);
-group.dots.add(screen);
-const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(.035, 8, 6), new THREE.MeshBasicMaterial({color: COLOR.dot}), MAX_DOTS);
-dots.count = 0;
-dots.frustumCulled = false;
-group.dots.add(dots);
-const dotMatrix = new THREE.Matrix4();
-let dotBudget = 0;
-// A running tally of arrivals along the screen, drawn on its face: the stripes show as bumps long before the dots alone make them obvious.
-const TALLY_BINS = 48, tally = new Float32Array(TALLY_BINS);
-const tallyLine = stage.line({color: INK.spot, width: 2.4, opacity: 1, parent: group.dots});
-function clearDots() { dots.count = 0; dots.instanceMatrix.needsUpdate = true; dotBudget = 0; tally.fill(0); tallyLine.set([]); }
-function drawTally() {
-  // Lightly smoothed over neighbouring bins, so a handful of dots does not read as noise.
-  const smooth = Array.from(tally, (_, b) => (tally[Math.max(0, b - 1)] + 2 * tally[b] + tally[Math.min(TALLY_BINS - 1, b + 1)]) / 4);
-  const peak = Math.max(...smooth);
-  if (peak < 1) { tallyLine.set([]); return; }
-  const flat = [], x = DETECTOR_X * S - .05;
-  for (let b = 0; b < TALLY_BINS; b++) {
-    const z = zMin + (zMax - zMin) * (b + .5) / TALLY_BINS;
-    flat.push(x, .1 + 1.65 * smooth[b] / peak, z);
-  }
-  tallyLine.set(flat);
-}
-
-function buildProps() {
-  for (const child of [...group.props.children]) if (child !== energyLine.object) { group.props.remove(child); child.geometry?.dispose(); }
-  const yEdge = LY / 2 - ABSORB * DX;
-  if (settings.experiment === 'slits') {
-    const {half, width, height} = SLIT, s = settings.gap / 2, h = height * .32;
-    for (const [a, b] of [[-yEdge, -s - width / 2], [-s + width / 2, s - width / 2], [s + width / 2, yEdge]]) if (b > a) box(-half, half, a, b, h);
-  }
-  if (settings.experiment === 'tunnel') {
-    box(0, BARRIER_A, -yEdge, yEdge, settings.V0 * E_SCALE);
-    const E = 1.5 ** 2 / 2, y = E * E_SCALE;
-    energyLine.set([...toWorld(-yEdge * 1.4, -yEdge, y), ...toWorld(yEdge * 1.4, -yEdge, y)].map((v, i) => i % 3 === 2 ? zMax + .15 : v));
-  } else energyLine.set([]);
-}
-
-// ---------------------------------------------------------------- hydrogen orbitals
-const dotTexture = (() => {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d'), g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.4, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 32, 32);
-  return new THREE.CanvasTexture(c);
-})();
-const atomPoints = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
-  size: .09, map: dotTexture, vertexColors: true, transparent: true, opacity: .9, depthWrite: false,
-}));
-group.atom.add(atomPoints);
-const nucleus = stage.sprite(INK.dark, .5, group.atom);
-const axis = stage.line({color: INK.grey, width: 1, opacity: .7, dashed: true, dash: [.15, .15], parent: group.atom});
-let atomInfo = null;
-function buildAtom() {
-  const orb = q.orbital(settings.orbital), R = orb.extent, count = narrow() ? 16000 : 26000;
-  let seed = 11;
-  const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-  // Estimate the peak of |ψ|², then sample by rejection.
-  let peak = 0;
-  for (let i = 0; i < 40000; i++) {
-    const x = (random() * 2 - 1) * R, y = (random() * 2 - 1) * R, z = (random() * 2 - 1) * R;
-    peak = Math.max(peak, orb.psi(x, y, z) ** 2);
-  }
-  peak *= 1.3;
-  const positions = new Float32Array(count * 3), colors = new Float32Array(count * 3), scale = 5.5 / R;
-  const plus = new THREE.Color(COLOR.plus), minus = new THREE.Color(COLOR.minus);
-  for (let n = 0, tries = 0; n < count && tries < 8e6; tries++) {
-    const x = (random() * 2 - 1) * R, y = (random() * 2 - 1) * R, z = (random() * 2 - 1) * R;
-    const psi = orb.psi(x, y, z);
-    if (random() * peak > psi * psi) continue;
-    // The orbital's z axis points up in the scene.
-    positions.set([x * scale, z * scale, -y * scale], n * 3);
-    const c = psi >= 0 ? plus : minus, k = .35 + .45 * random();
-    colors.set([c.r * k, c.g * k, c.b * k], n * 3);
-    n++;
-  }
-  atomPoints.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  atomPoints.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  atomPoints.geometry.computeBoundingSphere();
-  axis.set([0, -6.5, 0, 0, 6.5, 0]);
-  atomInfo = {...orb, scale};
-}
-
-// ---------------------------------------------------------------- per frame: simulate and draw
-function writeTexture() {
-  const {re, im, V} = wave, data = texture.image.data;
-  // With the slits, scale to the wave beyond the wall (once some has got through) and dim the
-  // far stronger wave in front of it, so the interference stays visible.
-  const slits = settings.experiment === 'slits', iWall = NX / 2 + Math.ceil(SLIT.half / DX) + 2;
-  let peak = 0, peakBeyond = 0;
-  for (let k = 0; k < re.length; k += 2) {
-    const a = re[k] * re[k] + im[k] * im[k];
-    if (a > peak) peak = a;
-    if (slits && k % NX > iWall && a > peakBeyond) peakBeyond = a;
-  }
-  peak = Math.sqrt(slits && peakBeyond > peak * .004 ? peakBeyond : peak);
-  ampScale = peak > ampScale ? peak : ampScale + (peak - ampScale) * .03;
-  const inv = 1 / Math.max(ampScale, 1e-9), dimFront = slits && peakBeyond > 0 ? .3 : 1;
-  for (let k = 0; k < re.length; k++) {
-    const a = Math.hypot(re[k], im[k]), c = a > 1e-12 ? re[k] / a : 1, s = a > 1e-12 ? im[k] / a : 0;
-    data[k * 4] = Math.min(1, a * inv * (slits && k % NX <= iWall ? dimFront : 1)) * 255;
-    data[k * 4 + 1] = (c * .5 + .5) * 255;
-    data[k * 4 + 2] = (s * .5 + .5) * 255;
-    data[k * 4 + 3] = V[k] > .01 ? 255 : 0;
-  }
-  texture.needsUpdate = true;
-}
-
-function detect() {
-  // Dots arrive at a rate proportional to the probability at the screen line.
-  const i = Math.round(DETECTOR_X / DX + NX / 2), weights = [];
-  let total = 0;
-  for (let j = 0; j < NY; j++) {
-    const k = j * NX + i, w = wave.re[k] ** 2 + wave.im[k] ** 2;
-    weights.push(w);
-    total += w;
-  }
-  dotBudget += total * DX * 270;
-  while (dotBudget >= 1 && dots.count < MAX_DOTS) {
-    dotBudget -= 1;
-    let r = Math.random() * total, j = 0;
-    while (j < NY - 1 && r > weights[j]) { r -= weights[j]; j++; }
-    const y = (j - NY / 2 + Math.random() - .5) * DX;
-    const [x, , z] = toWorld(DETECTOR_X, y);
-    dotMatrix.makeTranslation(x - .03, .12 + Math.random() * 1.66, z);
-    dots.setMatrixAt(dots.count++, dotMatrix);
-    dots.instanceMatrix.needsUpdate = true;
-    const b = Math.floor((z - zMin) / (zMax - zMin) * TALLY_BINS);
-    if (b >= 0 && b < TALLY_BINS) tally[b]++;
-  }
-}
-
-function simulate(dtFrame) {
-  if (!playing || settings.experiment === 'atom') return;
-  stepDebt += RATES[settings.rate] * Math.min(dtFrame * 60, 3);
-  while (stepDebt >= 1) {
-    wave.step();
-    if (settings.experiment === 'slits' && layers.detector) detect();
-    if (settings.experiment === 'tunnel') tunnelBest = Math.max(tunnelBest, wave.probability(x => x >= BARRIER_A + 2));
-    stepDebt -= 1;
-  }
-  // When the wave has (almost) all left the grid, send another.
-  if (wave.norm() < .04) launch();
-}
-
-// ---------------------------------------------------------------- measurement
-const flash = stage.sprite(INK.spot, 2, scene, {opacity: 0});
-let found = null;   // where the last measurement found the particle, shown for a few seconds
-
-// The packet's spread: a bracket of ±1 standard deviation along x, riding above the wave.
-const spreadLine = stage.line({color: INK.dark, width: 2, opacity: 1, segments: true});
-const spreadMid = new THREE.Vector3();
-let spreadShown = false;
-function updateSpread() {
-  spreadShown = settings.experiment === 'packet' && heightOn > .5 && statsCache.sd > 0;
-  if (!spreadShown) { spreadLine.set([]); return; }
-  const {mean, sd, meanY = 0} = statsCache, h = HEIGHT * heightOn + .35, [x1, , z] = toWorld(mean - sd, meanY), [x2] = toWorld(mean + sd, meanY);
-  spreadLine.set([x1, h, z, x2, h, z, x1, h, z, x1, h - .25, z, x2, h, z, x2, h - .25, z]);
-  spreadMid.set((x1 + x2) / 2, h + .05, z);
-}
-function measure() {
-  if (settings.experiment === 'atom') {
-    toast('In the atom view the dots already are many measurements: each is one possible result.');
-    return;
-  }
-  const {re, im} = wave;
-  let total = 0;
-  for (let k = 0; k < re.length; k++) total += re[k] * re[k] + im[k] * im[k];
-  let r = Math.random() * total, k = 0;
-  while (k < re.length - 1 && r > re[k] * re[k] + im[k] * im[k]) { r -= re[k] * re[k] + im[k] * im[k]; k++; }
-  const x0 = wave.xAt(k % NX), y0 = wave.yAt(Math.floor(k / NX));
-  const nearby = wave.probability((x, y) => Math.hypot(x - x0, y - y0) < 1);
-  // A position measurement of finite precision: multiply by a narrow Gaussian there, and renormalise.
-  const w = 1.2;
+/** For an aimed emitter, lay the packet's long axis across the direction of travel. */
+function rotatePacket(x0, y0, a, sx) {
+  const c = Math.cos(a), s = Math.sin(a);
   for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
-    const kk = j * NX + i, d2 = (wave.xAt(i) - x0) ** 2 + (wave.yAt(j) - y0) ** 2, f = Math.exp(-d2 / (4 * w * w));
-    re[kk] *= f; im[kk] *= f;
+    const dx = wave.xAt(i) - x0, dy = wave.yAt(j) - y0, u = c * dx + s * dy, v = -s * dx + c * dy, k = j * NX + i;
+    const amp = Math.exp(-u * u / (4 * sx * sx) - v * v / (4 * lab.width * lab.width)), p = lab.k * u;
+    wave.re[k] = amp * Math.cos(p); wave.im[k] = amp * Math.sin(p);
   }
   wave.normalise();
-  ampScale = 1e-9;
-  flash.position.set(...toWorld(x0, y0, .6));
-  flash.material.opacity = 1;
-  found = {at: toWorld(x0, y0, 1.2), until: performance.now() + 3500};
-  toast(`Found at x = ${x0.toFixed(1)}, y = ${y0.toFixed(1)}. Beforehand, the chance of finding it within 1 unit of there was ${nearby < .001 ? 'under 0.1' : (nearby * 100).toFixed(1)}%.`);
 }
 
-// ---------------------------------------------------------------- readout, labels, tooltip
-const fmt = (x, d = 2) => x.toFixed(d);
-function setRow(n, name, note, value) {
-  $(`r${n}-name`).textContent = name;
-  $(`r${n}-note`).textContent = note;
-  $(`r${n}`).textContent = value;
-}
-let statsCache = {mean: 0, sd: 0}, statsFrame = 0;
-function updateReadout() {
-  const name = settings.experiment;
-  if (name === 'packet') {
-    if (++statsFrame % 6 === 0) {
-      statsCache = wave.statsX();
-      // Mean y as well, so the spread bracket follows a packet found off the centre line.
-      let sum = 0, sy = 0;
-      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
-        const k = j * NX + i, p = wave.re[k] ** 2 + wave.im[k] ** 2;
-        sum += p; sy += p * wave.yAt(j);
-      }
-      statsCache.meanY = sum > 0 ? sy / sum : 0;
-    }
-    setRow(1, 'Momentum', 'p = ħk, in units where ħ = m = 1', `k = ${fmt(settings.k)}`);
-    setRow(2, 'Wavelength', 'λ = h/p = 2π/k: one trip round the colours', `${fmt(2 * Math.PI / settings.k)}`);
-    setRow(3, 'Spread', 'standard deviation of position along x, measured', `${fmt(statsCache.sd, 1)}`);
-  } else if (name === 'slits') {
-    const lambda = 2 * Math.PI / 2, D = DETECTOR_X;
-    setRow(1, 'Electrons detected', layers.detector ? 'each dot is one arrival' : 'turn on the detector screen', `${dots.count}`);
-    setRow(2, 'Wavelength', 'λ = 2π/k for k = 2', `${fmt(lambda)}`);
-    setRow(3, 'Fringe spacing', 'expected λD/d, D = distance to the screen', `${fmt(lambda * D / settings.gap, 1)}`);
-  } else if (name === 'tunnel') {
-    const E = 1.5 ** 2 / 2;
-    setRow(1, 'Energy vs barrier', E < settings.V0 ? 'the barrier is higher: a ball would bounce' : 'the barrier is lower than the energy', `${fmt(E)} vs ${fmt(settings.V0)}`);
-    const showing = tunnelBest > .002 || tunnelLast === null ? tunnelBest : tunnelLast;
-    setRow(2, 'Transmitted, measured', tunnelBest > .002 || tunnelLast === null ? 'probability found beyond the barrier' : 'last run (the next packet is on its way)', `${(showing * 100).toFixed(1)}%`);
-    setRow(3, 'Transmitted, exact theory', 'square-barrier formula, averaged over the packet', `${(q.packetTransmission(1.5, 6, settings.V0, BARRIER_A) * 100).toFixed(1)}%`);
-  } else if (atomInfo) {
-    setRow(1, 'Orbital', `n = ${atomInfo.n}, l = ${atomInfo.l} · ${atomInfo.n - atomInfo.l - 1} radial and ${atomInfo.l} angular nodes`, settings.orbital);
-    setRow(2, 'Energy', 'Eₙ = −13.6 eV / n²', `${fmt(atomInfo.energy)} eV`);
-    setRow(3, 'Average distance', '⟨r⟩ from the nucleus, in Bohr radii (0.053 nm)', `${fmt(q.meanRadius(atomInfo.n, atomInfo.l), 1)} a₀`);
+function step() {
+  wave.step();
+  if (!lab.run || !lab.exp.plate) return;
+  // The plate absorbs whatever reaches it, and remembers where.
+  const i0 = Math.round(PLATE / DX + NX / 2);
+  let caught = 0;
+  for (let j = 0; j < NY; j++) for (let i = i0; i < i0 + 3; i++) {
+    const k = j * NX + i, d = (wave.re[k] * wave.re[k] + wave.im[k] * wave.im[k]) * DX * DX;
+    plateAcc[j] += d; caught += d; wave.re[k] = 0; wave.im[k] = 0;
   }
+  // Done once the plate has had its share and nothing more is arriving (what is left was reflected).
+  const run = lab.run, total = plateAcc.reduce((a, b) => a + b, 0);
+  // For a barrier, record the largest share of the wave beyond it (plus what the plate has already caught).
+  if (lab.exp.barrier && Math.round(wave.t / wave.dt) % 10 === 0) run.through = Math.max(run.through ?? 0, wave.probability(x => x > 1) + total);
+  run.quiet = caught < 2e-5 ? (run.quiet ?? 0) + 1 : 0;
+  if (wave.t > T_MAX || (wave.t > 20 && wave.norm() < .01) || (total > .002 && run.quiet > 40)) finishRun();
 }
-const labelPoint = new THREE.Vector3();
-function updateLabels() {
-  const rects = [$('story'), $('panel'), $('readout'), $('transport')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
-  const pin = (id, p, show) => positionLabel($(id), labelPoint.set(...p), camera, {show, avoid: rects});
-  const name = settings.experiment, yEdge = LY / 2 - ABSORB * DX;
-  $('label-barrier-text').textContent = name === 'tunnel' ? `Barrier V₀ = ${fmt(settings.V0)}` : 'Wall with two slits';
-  pin('label-barrier', toWorld(.5, -yEdge, name === 'tunnel' ? settings.V0 * E_SCALE + .2 : 2.1), name === 'tunnel' || name === 'slits');
-  // The energy label sits just in front of the barrier, where the comparison with its height is made.
-  const passed = tunnelBest > .002 ? tunnelBest : tunnelLast ?? 0, split = name === 'tunnel' && passed > .01;
-  $('label-reflected-text').textContent = `Reflected · ${Math.round((1 - passed) * 100)}%`;
-  $('label-transmitted-text').textContent = `Tunnelled through · ${Math.round(passed * 100)}%`;
-  // On phones the energy label gives way once the reflected and tunnelled labels appear.
-  pin('label-energy', toWorld(-12, yEdge, 1.125 * E_SCALE + .15).map((v, i) => i === 2 ? zMax + .15 : v), name === 'tunnel' && !(split && narrow()));
-  pin('label-reflected', toWorld(-16, 0, HEIGHT * heightOn * .6 + .4), split);
-  pin('label-transmitted', toWorld(26, 0, HEIGHT * heightOn * .6 + .4), split);
-  pin('label-found', found ? found.at : [0, 0, 0], !!found && performance.now() < found.until && name !== 'atom');
-  $('label-spread-text').textContent = `spread ±${fmt(statsCache.sd, 1)}`;
-  pin('label-spread', [spreadMid.x, spreadMid.y, spreadMid.z], spreadShown);
-  pin('label-screen', toWorld(DETECTOR_X, yEdge, 2.05), name === 'slits' && layers.detector);
-  pin('label-nucleus', [0, -.35, 0], name === 'atom');
-}
-
-const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
-function cellAt(clientX, clientY) {
-  if (settings.experiment === 'atom') return null;
-  pointer.set(clientX / innerWidth * 2 - 1, -(clientY / innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  if (!raycaster.ray.intersectPlane(plane, hit)) return null;
-  const [i, j] = cellOf(hit.x / S, -hit.z / S);
-  if (i < ABSORB || j < ABSORB || i >= NX - ABSORB || j >= NY - ABSORB) return null;
-  return [i, j];
-}
-function describe([i, j]) {
-  const k = j * NX + i, p = wave.re[k] ** 2 + wave.im[k] ** 2, phase = Math.atan2(wave.im[k], wave.re[k]) * 180 / Math.PI;
-  return `<h4>Here</h4>
-    <div class="row"><span>Probability density |ψ|²</span><span>${(p * 1000).toFixed(2)} per 1000 units²</span></div>
-    <div class="row"><span>Phase of ψ</span><span>${phase.toFixed(0)}°</span></div>
-    <div class="row"><span>Potential V</span><span>${wave.V[k].toFixed(2)}</span></div>
-    <div class="note">The chance of finding the particle in a small patch is |ψ|² × its area.</div>`;
-}
-let downAt = null;
-$('scene').addEventListener('pointermove', event => {
-  if (event.pointerType !== 'mouse' || event.buttons) return;
-  const c = cellAt(event.clientX, event.clientY);
-  showTip(event.clientX, event.clientY, c && describe(c));
-});
-$('scene').addEventListener('pointerdown', event => { downAt = [event.clientX, event.clientY]; controls.autoRotate = false; });
-$('scene').addEventListener('pointerup', event => {
-  if (!downAt || Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) > 6 || event.pointerType === 'mouse') return;
-  const c = cellAt(event.clientX, event.clientY);
-  showTip(event.clientX, event.clientY, c && describe(c));
-});
-$('scene').addEventListener('pointerleave', () => showTip(0, 0, null));
-
-// ---------------------------------------------------------------- camera
-const FRAMING = {
-  surface: () => narrow() ? [0, 26, 25] : [0, 13, 15.5],
-  // For the slits, look from the source side so the detector screen faces the camera.
-  slits: () => narrow() ? [-14, 23, 23] : [-9.5, 12, 14.5],
-  top: () => narrow() ? [0, 40, .5] : [0, 24, .5],
-  atom: () => narrow() ? [0, 3.5, 17] : [0, 4, 15],
-};
-const offset = new THREE.Vector3(), target = new THREE.Vector3();
-let offsetTween = null;
-const TARGETS = {slits: [2, 0, 0]};
-/** Pulls the camera back on narrow-aspect windows so the whole simulated area stays in view. */
-function fitted(v, name) {
-  if (name === 'atom') return v;
-  const halfWidth = (LX / 2 - ABSORB * DX) * S + .5, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : 1.35) / v.length()));
-}
-function setFraming(name, animate = true) {
-  target.set(...(TARGETS[name] ?? [0, 0, 0]));
-  const to = fitted(new THREE.Vector3(...FRAMING[name]()), name);
-  if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
-  else { offset.copy(to); offsetTween = null; }
-}
-const framingNow = () => settings.experiment === 'atom' ? 'atom' : targetHeight < .5 ? 'top' : settings.experiment === 'packet' ? 'surface' : 'slits';
-controls.addEventListener('start', () => { offsetTween = null; });
-
-// ---------------------------------------------------------------- controls
-const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
-const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
-function setPlaying(on) {
-  playing = on;
-  $('play').innerHTML = on ? ICON_PAUSE : ICON_PLAY;
-  $('play').setAttribute('aria-label', on ? 'Pause' : 'Play');
-}
-function applyLayers(next) {
-  if (next) for (const key of Object.keys(layers)) layers[key] = !!next[key];
-  group.dots.visible = layers.detector && settings.experiment === 'slits';
-  for (const chip of document.querySelectorAll('.chip')) setPressed(chip, layers[chip.dataset.layer]);
-}
-function setView(top, announce = false) {
-  targetHeight = top ? 0 : 1;
-  if (reducedMotion) heightOn = targetHeight;
-  setPressed($('view-surface'), !top);
-  setPressed($('view-top'), top);
-  if (announce) { setFraming(framingNow()); toast(top ? 'Seen from above: brightness is probability, colour is phase.' : 'Height shows probability.'); }
-}
-for (const name of Object.keys(q.ORBITALS)) {
-  const b = document.createElement('button');
-  b.textContent = name;
-  b.dataset.orbital = name;
-  b.onclick = () => { settings.orbital = name; buildAtom(); updateControls(); };
-  $('orbitals').append(b);
-}
-function updateControls() {
-  const name = settings.experiment;
-  for (const b of document.querySelectorAll('[data-experiment]')) setPressed(b, b.dataset.experiment === name);
-  for (const b of document.querySelectorAll('[data-orbital]')) setPressed(b, b.dataset.orbital === settings.orbital);
-  const p = PARAM[name];
-  $('param-group').hidden = !p;
-  $('orbital-group').hidden = name !== 'atom';
-  $('measure').hidden = name === 'atom';
-  if (p) {
-    const input = $('param');
-    Object.assign(input, {min: p.min, max: p.max, step: p.step});
-    input.value = settings[p.key];
-    input.style.setProperty('--progress', `${(settings[p.key] - p.min) / (p.max - p.min) * 100}%`);
-    $('param-name').textContent = p.name;
-    $('out-param').textContent = p.format(settings[p.key]);
+function finishRun() {
+  const run = lab.run;
+  lab.run = null;
+  lab.lastProfile = Float64Array.from(plateAcc);
+  if (run.through != null) lab.through = run.through;
+  let detected = 0;
+  for (const v of plateAcc) detected += v;
+  for (let n = 0; n < run.count; n++) {
+    lab.fired++;
+    if (Math.random() >= detected) continue;          // this particle went elsewhere (reflected, or left the chamber)
+    const j = q.sampleIndex(plateAcc);
+    lab.detections.push(wave.yAt(j) + (Math.random() - .5) * DX);
+    lab.jitter.push(Math.random());
   }
-  $('out-rate').textContent = `${RATES[settings.rate]}×`;
-  $('rate').value = settings.rate;
-  $('rate').style.setProperty('--progress', `${settings.rate / 3 * 100}%`);
-}
-function chooseExperiment(name) {
-  settings.experiment = name;
-  setupExperiment(true);
-  setFraming(framingNow());
-  if (!playing) setPlaying(true);
+  renderInsight(); drawPlate();
+  if (lab.auto) setTimeout(() => { if (lab.auto && !lab.run) fire(AUTO); }, 250);
 }
 
-$('play').onclick = () => setPlaying(!playing);
-$('reset').onclick = () => chooseExperiment(settings.experiment);
-$('measure').onclick = measure;
-$('view-surface').onclick = () => setView(false, true);
-$('view-top').onclick = () => setView(true, true);
-$('reset-camera').onclick = () => setFraming(framingNow());
-for (const b of document.querySelectorAll('[data-experiment]')) b.onclick = () => chooseExperiment(b.dataset.experiment);
-for (const chip of document.querySelectorAll('.chip')) chip.onclick = () => { layers[chip.dataset.layer] = !layers[chip.dataset.layer]; applyLayers(); };
-$('param').addEventListener('input', e => {
-  const p = PARAM[settings.experiment];
-  settings[p.key] = +e.target.value;
-  // The slit gap changes live; momentum and barrier height send a fresh packet.
-  setupExperiment(settings.experiment !== 'slits');
-  if (settings.experiment === 'slits') clearDots();
-});
-$('rate').addEventListener('input', e => { settings.rate = +e.target.value; updateControls(); });
-function showPanel(open) {
-  $('panel').classList.toggle('sheet-closed', !open);
-  $('panel-toggle').setAttribute('aria-expanded', String(open));
+// ---------------------------------------------------------------- atom
+let atomGrid = null;
+function buildAtom() {
+  const o = q.orbital(lab.orbital), R = o.extent * .5, w = 220, h = 110, density = new Float64Array(w * h), sign = new Int8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const x = (i / (w - 1) - .5) * 4 * R, z = (.5 - j / (h - 1)) * 2 * R, p = o.psi(x, 0, z);
+    density[j * w + i] = p * p; sign[j * w + i] = Math.sign(p);
+  }
+  atomGrid = {o, R, w, h, density, sign, max: Math.max(...density)};
 }
-$('panel-toggle').onclick = () => showPanel($('panel').classList.contains('sheet-closed'));
-bindDialog($('notes'), $('about'), () => setPlaying(false));
-stage.onContextLost = () => setPlaying(false);
-const toggleView = () => setView(targetHeight > .5, true);
-bindKeys({
-  ' ': () => setPlaying(!playing),
-  1: () => chooseExperiment('packet'), 2: () => chooseExperiment('slits'),
-  3: () => chooseExperiment('tunnel'), 4: () => chooseExperiment('atom'),
-  m: measure, M: measure, t: toggleView, T: toggleView,
-  r: () => chooseExperiment(settings.experiment), R: () => chooseExperiment(settings.experiment),
-});
+function look(count) {
+  const g = atomGrid;
+  for (let n = 0; n < count; n++) {
+    const idx = q.sampleIndex(g.density);
+    const i = idx % g.w + Math.random() - .5, j = Math.floor(idx / g.w) + Math.random() - .5;
+    lab.atomDots.push([(i / (g.w - 1) - .5) * 4 * g.R, (.5 - j / (g.h - 1)) * 2 * g.R]);
+  }
+  if (lab.atomDots.length > 6000) lab.atomDots.splice(0, lab.atomDots.length - 6000);
+  renderInsight(); draw();
+}
 
-const story = createStory({
-  steps,
-  onEnter(step, index) {
-    settings.experiment = step.experiment;
-    if (step.orbital) settings.orbital = step.orbital;
-    applyLayers(step.layers);
-    setupExperiment(true);
-    setView(step.view === 'top');
-    showPanel(index === steps.length - 1 && !narrow());
-    setFraming(framingNow());
-    showTip(0, 0, null);
-    setPlaying(!reducedMotion);
-  },
-});
-
-offset.copy(fitted(new THREE.Vector3(...FRAMING.surface()), 'surface'));
-camera.position.copy(target).add(offset);
-controls.target.copy(target);
-controls.update();
-story.show(0);
-new ResizeObserver(() => stage.resize()).observe($('story'));
-new ResizeObserver(() => stage.resize()).observe($('readout'));
+// ---------------------------------------------------------------- the chamber print
+const chamber = $('c-chamber'), cctx = chamber.getContext('2d'), plateCanvas = $('c-plate'), pctx = plateCanvas.getContext('2d');
+const size = {cw: 1, ch: 1, pw: 1, ph: 1, dpr: 1};
 new ResizeObserver(() => {
-  document.documentElement.style.setProperty('--dock-h', `${$('transport').offsetHeight}px`);
-  stage.resize();
-}).observe($('transport'));
-
-let lastFrame = performance.now();
-function frame(time) {
-  requestAnimationFrame(frame);
-  const dt = Math.max(0, Math.min((time - lastFrame) / 1000, .08));
-  lastFrame = time;
-  if (!document.hidden) simulate(dt);
-  heightOn += (targetHeight - heightOn) * Math.min(1, dt * 4);
-  surfaceMaterial.uniforms.heightScale.value = HEIGHT * heightOn;
-  surfaceMaterial.uniforms.phaseMix.value += ((layers.phase ? 1 : 0) - surfaceMaterial.uniforms.phaseMix.value) * Math.min(1, dt * 4);
-  group.props.scale.y = .2 + .8 * heightOn;
-  flash.material.opacity *= .94;
-  if (settings.experiment !== 'atom') writeTexture();
-  updateSpread();
-  if (settings.experiment === 'slits' && layers.detector) drawTally();
-
-  controls.update();
-  offset.copy(camera.position).sub(controls.target);
-  if (offsetTween) {
-    offsetTween.u = Math.min(1, offsetTween.u + dt / 1.2);
-    const k = offsetTween.u < .5 ? 2 * offsetTween.u ** 2 : 1 - (-2 * offsetTween.u + 2) ** 2 / 2;
-    offset.lerpVectors(offsetTween.from, offsetTween.to, k);
-    if (offsetTween.u === 1) offsetTween = null;
-  }
-  controls.target.copy(target);
-  camera.position.copy(target).add(offset);
-  stage.setFogFor(offset.length() * 1.4);
-
-  updateReadout();
-  updateLabels();
-  stage.render();
+  const d = Math.min(devicePixelRatio || 1, 2), r = chamber.getBoundingClientRect(), p = plateCanvas.getBoundingClientRect();
+  Object.assign(size, {cw: r.width, ch: r.height, pw: p.width, ph: p.height, dpr: d});
+  chamber.width = Math.round(r.width * d); chamber.height = Math.round(r.height * d);
+  plateCanvas.width = Math.round(p.width * d); plateCanvas.height = Math.round(p.height * d);
+  draw(); drawPlate();
+}).observe(document.querySelector('.room'));
+/** Chamber: fit the 128 × 64 grid (or the orbital slice) into the print, keeping its shape. */
+function view() {
+  const s = Math.min(size.cw / LX, size.ch / LY);
+  return {s, ox: size.cw / 2, oy: size.ch / 2, to: (x, y) => [size.cw / 2 + x * s, size.ch / 2 - y * s], from: (px, py) => [(px - size.cw / 2) / s, (size.ch / 2 - py) / s]};
 }
-setPlaying(playing);
+let dmax = 1e-3, lookMark = null;
+function drawWalls(ctx, v) {
+  // Walls (tall) solid, barriers hatched; one sample per grid cell.
+  const cell = DX * v.s;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const x = wave.xAt(i), y = wave.yAt(j), V = baseV(x, y) + paint[j * NX + i];
+    if (V <= .05 || lab.exp.omega) continue;
+    const [px, py] = v.to(x, y);
+    ctx.fillStyle = V >= WALL * .8 ? C.oliveDark : `rgba(86,97,42,${Math.min(.55, .12 + V * .12)})`;
+    ctx.fillRect(px - cell / 2, py - cell / 2, cell + .6, cell + .6);
+  }
+  if (lab.exp.omega) {
+    ctx.strokeStyle = 'rgba(86,97,42,.45)'; ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+    for (const V of [.5, 2, 4.5, 8]) { const r = Math.sqrt(2 * V) / lab.exp.omega; ctx.beginPath(); ctx.arc(v.ox, v.oy, r * v.s, 0, 2 * Math.PI); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+}
+function draw() {
+  if (!lab.exp) return;
+  const ctx = cctx, v = view();
+  ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+  ctx.fillStyle = C.print; ctx.fillRect(0, 0, size.cw, size.ch);
+  if (lab.exp.atom) return drawAtom(ctx);
+  drawWalls(ctx, v);
+  // Halftone print of |ψ|²: dot area proportional to the probability density.
+  const g = Math.max(4.5, size.cw / 170);
+  let m = 0;
+  const dens = [];
+  for (let py = g / 2; py < size.ch; py += g) for (let px = g / 2; px < size.cw; px += g) {
+    const [x, y] = v.from(px, py), i = Math.round(x / DX + NX / 2), j = Math.round(y / DX + NY / 2);
+    if (i < 0 || j < 0 || i >= NX || j >= NY) continue;
+    const k = j * NX + i, d = wave.re[k] * wave.re[k] + wave.im[k] * wave.im[k];
+    m = Math.max(m, d); if (d > dmax * .004) dens.push(px, py, d, k);
+  }
+  dmax = m > dmax ? m : dmax + (m - dmax) * .05;
+  for (let n = 0; n < dens.length; n += 4) {
+    const d = dens[n + 2], k = dens[n + 3], r = g * .58 * Math.sqrt(Math.min(1, d / dmax));
+    if (r < .35) continue;
+    const crest = lab.crests && d > dmax * .03 && wave.re[k] / Math.sqrt(d) > .92;
+    ctx.fillStyle = crest ? C.spot : C.ink;
+    ctx.beginPath(); ctx.arc(dens[n], dens[n + 1], r, 0, 2 * Math.PI); ctx.fill();
+  }
+  // The plate's edge in the chamber, with the latest particles found.
+  if (lab.exp.plate) {
+    const [px] = v.to(PLATE, 0);
+    ctx.strokeStyle = C.film; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, size.ch); ctx.stroke();
+    ctx.fillStyle = C.spot;
+    for (const y of lab.detections.slice(-60)) { const [, py] = v.to(PLATE, y); ctx.fillRect(px + 2, py - 1, 6, 2); }
+    label(ctx, 'PLATE', px - 6, 14, 'right');
+  }
+  drawEmitter(ctx, v);
+  if (lookMark) {
+    const [lx, ly] = v.to(lookMark.x, lookMark.y), age = (performance.now() - lookMark.t) / 1500;
+    if (age < 1) {
+      ctx.globalAlpha = 1 - age; ctx.strokeStyle = C.spot; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(lx, ly, LOOK_R * v.s, 0, 2 * Math.PI); ctx.stroke();
+      label(ctx, lookMark.found ? `FOUND (${Math.round(lookMark.p * 100)}% chance)` : `NOT HERE (${Math.round(lookMark.p * 100)}% chance)`, lx, ly - LOOK_R * v.s - 6, 'center', C.spot);
+      ctx.globalAlpha = 1;
+    } else lookMark = null;
+  }
+  if (!lab.run && wave.norm() < .02 && !lab.exp.omega) label(ctx, 'READY · PRESS FIRE ONE', size.cw / 2, size.ch / 2, 'center', C.ink3);
+}
+function label(ctx, s, x, y, align = 'left', color = C.ink) {
+  ctx.font = '700 10px "Space Mono", monospace'; ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(s, x, y); ctx.textAlign = 'left';
+}
+function emitterTip() { const a = lab.emitter.angle * Math.PI / 180, L = 4 + lab.k * 5; return [lab.emitter.x + Math.cos(a) * L, lab.emitter.y + Math.sin(a) * L]; }
+function drawEmitter(ctx, v) {
+  const e = lab.emitter, [ex, ey] = v.to(e.x, e.y), [tx, ty] = v.to(...emitterTip()), a = Math.atan2(ty - ey, tx - ex);
+  ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
+  ctx.fillStyle = C.film; ctx.fillRect(-18, -7, 18, 14); ctx.fillRect(-4, -4, 8, 8);
+  ctx.restore();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1.4; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+  ctx.save(); ctx.translate(tx, ty); ctx.rotate(a);
+  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-4, 5); ctx.lineTo(-4, -5); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = C.print; ctx.strokeStyle = C.ink; ctx.beginPath(); ctx.arc(tx, ty, 5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  if (!lab.exp.omega) label(ctx, `EMITTER · k ${lab.k.toFixed(2)}`, ex, ey + 22, 'center', C.ink3);
+}
+function drawAtom(ctx) {
+  const g = atomGrid, s = Math.min(size.cw / (4 * g.R), size.ch / (2 * g.R)), ox = size.cw / 2, oy = size.ch / 2;
+  const gap = Math.max(4.5, size.cw / 170);
+  for (let py = gap / 2; py < size.ch; py += gap) for (let px = gap / 2; px < size.cw; px += gap) {
+    const i = Math.round(((px - ox) / s / (4 * g.R) + .5) * (g.w - 1)), j = Math.round(((py - oy) / s / (2 * g.R) + .5) * (g.h - 1));
+    if (i < 0 || j < 0 || i >= g.w || j >= g.h) continue;
+    const k = j * g.w + i, r = gap * .58 * Math.sqrt(g.density[k] / g.max);
+    if (r < .35) continue;
+    ctx.fillStyle = g.sign[k] < 0 ? C.spot : C.ink; ctx.globalAlpha = .55;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 2 * Math.PI); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = C.oliveDark;
+  for (const [x, z] of lab.atomDots) ctx.fillRect(ox + x * s - 1.2, oy - z * s - 1.2, 2.4, 2.4);
+  ctx.fillStyle = C.spot; ctx.beginPath(); ctx.arc(ox, oy, 3, 0, 2 * Math.PI); ctx.fill();
+  label(ctx, 'NUCLEUS', ox + 8, oy + 16, 'left', C.spot);
+  const bar = 5 / .529 * s;   // 0.5 nm = 9.45 Bohr radii
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(14, size.ch - 14); ctx.lineTo(14 + bar, size.ch - 14); ctx.stroke();
+  label(ctx, '0.5 nm', 14, size.ch - 20);
+}
+
+// ---------------------------------------------------------------- the plate
+function drawPlate() {
+  const ctx = pctx, {pw, ph} = size, vertical = ph >= pw;
+  ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+  ctx.fillStyle = C.print; ctx.fillRect(0, 0, pw, ph);
+  if (!lab.exp?.plate) {
+    ctx.fillStyle = C.ink3; ctx.font = 'italic 12px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(lab.exp?.atom ? 'Dots go in the print' : 'No plate here', pw / 2, ph / 2); ctx.textAlign = 'left';
+    return;
+  }
+  // Along the plate: chamber y from +32 (top / left) to −32.
+  const along = y => (vertical ? ph : pw) * (.5 - y / LY), across = u => (vertical ? pw : ph) * (.12 + .76 * u);
+  const at = (y, u) => vertical ? [across(u), along(y)] : [along(y), across(u)];
+  // Expected pattern from the last wave, faint.
+  if (lab.lastProfile) {
+    const p = lab.lastProfile, m = Math.max(...p) || 1;
+    ctx.fillStyle = 'rgba(200,84,31,.14)';
+    ctx.beginPath(); ctx.moveTo(...at(wave.yAt(0), 0));
+    p.forEach((v, j) => ctx.lineTo(...at(wave.yAt(j), v / m)));
+    ctx.lineTo(...at(wave.yAt(NY - 1), 0)); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = C.ink;
+  lab.detections.forEach((y, n) => { const [x, yy] = at(y, lab.jitter[n]); ctx.beginPath(); ctx.arc(x, yy, 1.5, 0, 2 * Math.PI); ctx.fill(); });
+  $('count').textContent = lab.detections.length;
+}
+
+// ---------------------------------------------------------------- the log
+function renderExposure() {
+  const x = lab.exp;
+  $('exposures').innerHTML = exposures.map((e, i) => `<button class="pill${e === x ? ' on' : ''}" data-id="${e.id}"><i>${i + 1}</i>${e.label}</button>`).join('');
+  $('notes-card').innerHTML = `<h1>${x.title}</h1>${x.text}<div class="formula">${x.formula}<small>${x.note}</small></div>
+    <p class="cap">Try</p><ul class="try">${x.tries.map(t => `<li>${t}</li>`).join('')}</ul><div class="insight" id="insight"></div>`;
+  $('orbital-box').hidden = !x.atom; $('tool-box').hidden = !!x.atom;
+  for (const id of ['k', 'w']) $(id).closest('label').hidden = !!x.atom;
+  $('auto').hidden = !x.plate; $('fire100').hidden = !x.plate && !x.atom; $('clear-plate').hidden = !x.plate && !x.atom;
+  $('clear-plate').textContent = x.atom ? 'Clear dots' : 'Clear plate';
+  $('fire1').textContent = x.atom ? 'Look once' : x.omega ? 'Release again' : 'Fire one'; $('fire100').textContent = x.atom ? 'Look 100 times' : 'Fire 100';
+  $('orbitals').innerHTML = Object.keys(q.ORBITALS).map(n => `<button class="pill${n === lab.orbital ? ' on' : ''}" data-orbital="${n}">${n}</button>`).join('');
+  $('barrier-row').hidden = lab.tool !== 'barrier' && !x.barrier;
+  $('caption').textContent = x.atom
+    ? 'A slice through a hydrogen atom. Dot size: how likely the electron is to be found there. Ink and orange: the two signs of the wave.'
+    : 'Dot size: how likely the particle is to be found there (|ψ|²). Dark blocks are walls; shaded areas are barriers it can tunnel through.';
+}
+function renderInsight() {
+  const el = $('insight'); if (el) el.innerHTML = lab.exp.insight(lab);
+  $('count').textContent = lab.exp.atom ? lab.atomDots.length : lab.detections.length;
+}
+function setSliders() {
+  $('k').value = lab.k; $('out-k').textContent = lab.k.toFixed(2);
+  $('w').value = lab.width; $('out-w').textContent = lab.width.toFixed(1);
+  $('v').value = lab.V0; $('out-v').textContent = lab.V0.toFixed(2);
+}
+function load(x) {
+  lab.exp = x; lab.run = null; lab.detections = []; lab.jitter = []; lab.fired = 0; lab.lastProfile = null; lab.atomDots = []; lab.auto = false;
+  $('auto').classList.remove('on'); $('auto').setAttribute('aria-pressed', 'false');
+  paint.fill(0); baseV = () => 0;
+  if (x.emitter) { lab.emitter = {x: x.emitter.x, y: x.emitter.y, angle: x.emitter.angle}; lab.k = x.emitter.k; lab.width = x.emitter.width; }
+  if (x.barrier) lab.V0 = x.barrier;
+  if (x.orbital) lab.orbital = x.orbital;
+  x.setup(lab);
+  if (x.atom) buildAtom();
+  else {
+    applyPotential();
+    wave.re.fill(0); wave.im.fill(0); wave.t = 0;
+    if (x.omega) fire(0);           // the well starts with its particle already released
+  }
+  setSliders(); renderExposure(); renderInsight(); draw(); drawPlate();
+}
+
+// ---------------------------------------------------------------- hands
+const LOOK_R = 4;
+function setTool(t) {
+  lab.tool = t;
+  for (const b of document.querySelectorAll('[data-tool]')) { b.classList.toggle('on', b.dataset.tool === t); b.setAttribute('aria-pressed', String(b.dataset.tool === t)); }
+  $('tool-hint').textContent = HINTS[t];
+  $('barrier-row').hidden = t !== 'barrier' && !lab.exp?.barrier;
+}
+let drag = null;
+const at = event => { const r = chamber.getBoundingClientRect(); return view().from(event.clientX - r.left, event.clientY - r.top); };
+function paintAt(x, y) {
+  const r = 2.2, V = lab.tool === 'wall' ? WALL : lab.tool === 'barrier' ? lab.V0 : 0;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const dx = wave.xAt(i) - x, dy = wave.yAt(j) - y;
+    if (dx * dx + dy * dy <= r * r) paint[j * NX + i] = V;
+  }
+  // The emitter's own spot stays clear.
+  applyPotential();
+}
+chamber.addEventListener('pointerdown', event => {
+  if (lab.exp.atom) { look(1); return; }
+  const [x, y] = at(event), e = lab.emitter, [tx, ty] = emitterTip(), s = view().s;
+  chamber.setPointerCapture(event.pointerId);
+  if (lab.tool === 'move') {
+    if (Math.hypot(x - tx, y - ty) * s < 14) drag = 'aim';
+    else if (Math.hypot(x - e.x, y - e.y) * s < 22) drag = 'emitter';
+  } else if (lab.tool === 'look') {
+    const res = wave.collapse((px, py) => Math.hypot(px - x, py - y) < LOOK_R);
+    lookMark = {x, y, ...res, t: performance.now()};
+  } else { drag = 'paint'; paintAt(x, y); }
+  draw();
+});
+chamber.addEventListener('pointermove', event => {
+  const [x, y] = at(event);
+  if (drag === 'emitter') { lab.emitter.x = Math.max(-58, Math.min(PLATE - 6, x)); lab.emitter.y = Math.max(-28, Math.min(28, y)); }
+  else if (drag === 'aim') {
+    const e = lab.emitter, dx = x - e.x, dy = y - e.y;
+    lab.emitter.angle = Math.round(Math.atan2(dy, dx) * 180 / Math.PI);
+    lab.k = Math.max(.6, Math.min(3, (Math.hypot(dx, dy) - 4) / 5));
+    setSliders();
+  } else if (drag === 'paint') paintAt(x, y);
+  if (drag) { draw(); return; }
+  if (lab.exp.atom) return showTip(null);
+  const i = Math.round(x / DX + NX / 2), j = Math.round(y / DX + NY / 2);
+  if (i < 0 || j < 0 || i >= NX || j >= NY) return showTip(null);
+  const V = baseV(x, y) + paint[j * NX + i], k = j * NX + i, d = wave.re[k] ** 2 + wave.im[k] ** 2;
+  showTip(event, V >= WALL * .8 ? '<b>Wall</b>Far higher than the particle’s energy: the wave reflects.' :
+    V > .05 && !lab.exp.omega ? `<b>Barrier, V = ${V.toFixed(2)}</b>The particle’s energy is ${(lab.k * lab.k / 2).toFixed(2)}: ${lab.k * lab.k / 2 < V ? 'too low to climb it, but it can tunnel.' : 'enough to pass over it.'}` :
+    d > dmax * .02 ? `<b>Probability here</b>About ${Math.min(100, d * Math.PI * LOOK_R * LOOK_R * 100).toFixed(0)}% chance of finding it inside a Look circle here.` : null);
+});
+const end = () => { drag = null; };
+chamber.addEventListener('pointerup', end);
+chamber.addEventListener('pointercancel', end);
+chamber.addEventListener('pointerleave', () => showTip(null));
+function showTip(event, html) {
+  const tip = $('tip');
+  if (!html) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = html; tip.classList.add('visible');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.transform = `translate(${Math.min(innerWidth - w - 10, event.clientX + 16)}px, ${Math.max(10, Math.min(innerHeight - h - 10, event.clientY - h - 12))}px)`;
+}
+
+$('exposures').addEventListener('click', event => { const b = event.target.closest('[data-id]'); if (b) load(exposures.find(x => x.id === b.dataset.id)); });
+$('orbitals').addEventListener('click', event => { const b = event.target.closest('[data-orbital]'); if (!b) return; lab.orbital = b.dataset.orbital; lab.atomDots = []; buildAtom(); renderExposure(); renderInsight(); draw(); });
+$('tools').addEventListener('click', event => { const b = event.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
+$('clear-walls').onclick = () => { paint.fill(0); applyPotential(); draw(); };
+$('fire1').onclick = () => fire(1);
+$('fire100').onclick = () => fire(100);
+$('auto').onclick = () => {
+  lab.auto = !lab.auto; $('auto').classList.toggle('on', lab.auto); $('auto').setAttribute('aria-pressed', String(lab.auto));
+  if (lab.auto && !lab.run) fire(AUTO);
+};
+$('clear-plate').onclick = () => { lab.detections = []; lab.jitter = []; lab.fired = 0; lab.atomDots = []; renderInsight(); drawPlate(); draw(); };
+$('k').oninput = event => { lab.k = +event.target.value; setSliders(); draw(); };
+$('w').oninput = event => { lab.width = +event.target.value; setSliders(); };
+$('v').oninput = event => {
+  lab.V0 = +event.target.value; setSliders();
+  if (lab.exp.barrier) applyPotential();
+  renderInsight(); draw();
+};
+$('t-crests').onclick = () => { lab.crests = !lab.crests; $('t-crests').classList.toggle('on', lab.crests); $('t-crests').setAttribute('aria-pressed', String(lab.crests)); draw(); };
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => {
+  lab.speed = +b.dataset.speed;
+  for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b);
+};
+function setPlaying(on) { lab.playing = on; $('play').textContent = on ? 'Pause' : 'Play'; $('play').setAttribute('aria-label', on ? 'Pause' : 'Play'); }
+$('play').onclick = () => setPlaying(!lab.playing);
+const notes = $('notes');
+$('about').onclick = () => notes.showModal();
+notes.querySelector('.close').onclick = () => notes.close();
+notes.addEventListener('click', event => { if (event.target === notes) notes.close(); });
+addEventListener('keydown', event => {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, dialog[open]')) return;
+  if (event.key === ' ') { event.preventDefault(); setPlaying(!lab.playing); }
+  else if (event.key === 'f' || event.key === 'F') fire(1);
+  else if (event.key === 'c' || event.key === 'C') $('t-crests').click();
+  else if (/^[1-7]$/.test(event.key)) load(exposures[+event.key - 1]);
+});
+
+// ---------------------------------------------------------------- loop
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let lastInsight = 0;
+function frame(now) {
+  if (lab.playing && !lab.exp.atom && (lab.run || lab.exp.omega)) {
+    const n = reducedMotion ? 1 : lab.speed;
+    for (let s = 0; s < n && (lab.run || lab.exp.omega); s++) step();
+  }
+  if (!lab.exp.atom || lookMark) draw();
+  if (now - lastInsight > 500) { lastInsight = now; renderInsight(); }
+  requestAnimationFrame(frame);
+}
+setTool('move');
+load(exposures[0]);
 requestAnimationFrame(frame);
 
-// With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__quantum = {wave, settings, measure, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
+  window.__quantum = {
+    lab, wave, exposures, load: id => load(exposures.find(x => x.id === id)), fire,
+    run: steps => { for (let s = 0; s < steps && (lab.run || lab.exp.omega); s++) step(); draw(); drawPlate(); return wave.t; },
+    snap: () => ({exp: lab.exp.id, t: wave.t, norm: wave.norm(), running: !!lab.run, fired: lab.fired, found: lab.detections.length, insight: $('insight')?.textContent}),
+  };
 }

@@ -4,122 +4,91 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#ece4d2">
-<meta name="description" content="The Schrödinger equation, solved live: a particle as a wave, the double slit dot by dot, tunnelling through walls, and the exact shapes of hydrogen orbitals.">
+<meta name="description" content="The particle darkroom: fire quantum particles one at a time and watch an interference pattern build up dot by dot. Slits, tunnelling, measurement and hydrogen orbitals, solved live from Schrödinger's equation.">
 <title>Quantum Waves · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Quantum Waves · Theoria">
-<meta property="og:description" content="The Schrödinger equation, solved live: a particle as a wave, the double slit dot by dot, tunnelling through walls, and the exact shapes of hydrogen orbitals.">
+<meta property="og:description" content="Fire particles one at a time and watch the pattern build up: slits, tunnelling, measurement and orbitals, from Schrödinger's equation.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="../shared/shell.css">
-<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="darkroom.css">
 </head>
-<body class="v2 riso">
-<main class="stage" aria-label="Quantum waves experiment">
-  <canvas id="scene" aria-label="3D view of a quantum wavefunction"></canvas>
-
-  <header class="topbar">
-    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Quantum mechanics · Quantum waves</span></a>
-    <nav class="view-switch" aria-label="View">
-      <button id="view-surface" class="active" aria-pressed="true">Surface</button>
-      <button id="view-top" aria-pressed="false">Top</button>
-    </nav>
-    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-    </button>
-    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+<body>
+<main class="room" aria-label="The particle darkroom">
+  <header class="top">
+    <a class="mark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Quantum waves · the particle darkroom</span></a>
+    <button class="pill" id="t-crests" aria-pressed="false">Wave crests</button>
+    <button class="pill" id="play" aria-label="Pause">Pause</button>
+    <div class="pills" role="group" aria-label="Speed">
+      <button class="pill" data-speed="1">Slow</button>
+      <button class="pill on" data-speed="2">Normal</button>
+      <button class="pill" data-speed="4">Fast</button>
+    </div>
+    <button class="pill" id="about" aria-label="What is calculated, and how" title="The physics">i</button>
+    <a class="next wide-only" href="../entropy/">Next: Entropy →</a>
   </header>
 
-  <section class="story glass" id="story" aria-live="polite"></section>
-
-  <div class="labels" aria-hidden="true">
-    <div class="scene-label landmark" id="label-barrier"><div class="tag"><span class="name" id="label-barrier-text">Barrier</span></div></div>
-    <div class="scene-label landmark" id="label-energy"><div class="tag"><span class="name">Particle’s energy</span></div></div>
-    <div class="scene-label landmark" id="label-screen"><div class="tag"><span class="name">Detector screen</span></div></div>
-    <div class="scene-label landmark" id="label-nucleus"><div class="tag"><span class="name">Nucleus</span></div></div>
-    <div class="scene-label landmark" id="label-reflected"><div class="tag"><span class="name" id="label-reflected-text"></span></div></div>
-    <div class="scene-label landmark" id="label-transmitted"><div class="tag"><span class="name" id="label-transmitted-text"></span></div></div>
-    <div class="scene-label landmark" id="label-found"><div class="tag"><span class="name" style="color:#c8541f">Found here</span></div></div>
-    <div class="scene-label curve" id="label-spread"><div class="tag"><span class="name" id="label-spread-text"></span></div></div>
-  </div>
-
-  <section class="readout glass" id="readout" aria-label="Measurements">
-    <div class="readout-row"><i class="swatch" style="--c:#2f3614"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3"></strong></div>
+  <section class="chamber" aria-label="The chamber">
+    <div class="print"><canvas id="c-chamber" aria-label="The chamber: the particle's wave printed as dots, darker where it is more likely to be found"></canvas></div>
+    <p class="caption" id="caption"></p>
   </section>
 
-  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
-    <span class="eyebrow">Show</span>
-    <div class="chips">
-      <button class="chip" data-layer="phase" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Phase colours</button>
-      <button class="chip" data-layer="detector" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Detector screen</button>
-    </div>
-    <details class="settings" open>
-      <summary>Settings</summary>
-      <label><span>Simulation speed <output id="out-rate"></output></span>
-        <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Simulation speed"></label>
-      <p class="hint">ħ = m = 1. The grid is 128 × 64 units. Hover to read probability and phase.</p>
-    </details>
-  </aside>
+  <section class="plate" aria-label="The photographic plate">
+    <p class="cap" style="text-align:center">Plate</p>
+    <div class="film"><div class="print"><canvas id="c-plate" aria-label="Photographic plate: one dot for each particle detected"></canvas></div></div>
+    <div class="count" id="count">0</div>
+    <p class="cap">particles</p>
+  </section>
 
-  <footer class="transport dock glass" id="transport">
-    <button id="play" class="round-button" aria-label="Pause"></button>
-    <div class="dock-group experiment">
-      <span class="dock-label">Experiment</span>
-      <div class="segmented" role="group" aria-label="Experiment">
-        <button data-experiment="packet">Packet</button>
-        <button data-experiment="slits"><span class="wide-only">Two </span>Slits</button>
-        <button data-experiment="tunnel">Tunnel</button>
-        <button data-experiment="atom">Atom</button>
+  <section class="emitter" aria-label="Emitter">
+    <button class="pill fire" id="fire1">Fire one</button>
+    <button class="pill" id="fire100">Fire 100</button>
+    <button class="pill" id="auto" aria-pressed="false" title="Fires five particles at a time, again and again">Keep firing</button>
+    <span class="sep"></span>
+    <label><span>Momentum k <output id="out-k"></output></span><input id="k" type="range" min="0.6" max="3" step="0.05"></label>
+    <label><span>Packet width <output id="out-w"></output></span><input id="w" type="range" min="2" max="16" step="0.5"></label>
+    <button class="pill" id="clear-plate">Clear plate</button>
+  </section>
+
+  <aside class="log" aria-label="Exposures and notes">
+    <div><p class="cap">Exposures</p><div class="exposures" id="exposures"></div></div>
+    <div class="notes" id="notes-card" aria-live="polite"></div>
+    <div id="orbital-box" hidden><p class="cap">Orbital</p><div class="orbitals" id="orbitals"></div></div>
+    <div id="tool-box">
+      <p class="cap">Hands</p>
+      <div class="tools" id="tools">
+        <button class="pill on" data-tool="move" aria-pressed="true">Aim</button>
+        <button class="pill" data-tool="look" aria-pressed="false">Look</button>
+        <button class="pill" data-tool="wall" aria-pressed="false">Wall</button>
+        <button class="pill" data-tool="barrier" aria-pressed="false">Barrier</button>
+        <button class="pill" data-tool="erase" aria-pressed="false">Erase</button>
+        <button class="pill" id="clear-walls">Clear walls</button>
       </div>
+      <p class="hint" id="tool-hint"></p>
+      <label class="hint" id="barrier-row" hidden style="display:grid;gap:2px"><span>Barrier height V₀ <output id="out-v"></output></span><input id="v" type="range" min="0.3" max="4" step="0.05"></label>
     </div>
-    <div class="dock-group speed" id="param-group">
-      <span class="dock-label"><span id="param-name"></span> <output id="out-param"></output></span>
-      <input id="param" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Experiment setting">
-    </div>
-    <div class="dock-group" id="orbital-group" hidden>
-      <span class="dock-label">Orbital</span>
-      <div class="segmented" role="group" aria-label="Orbital" id="orbitals"></div>
-    </div>
-    <div class="dock-actions">
-      <button id="measure" class="text-button" title="Measure position (M)">Measure</button>
-      <button id="reset" class="text-button" title="Restart (R)">Restart</button>
-      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
-    </div>
-  </footer>
-  <div id="tip" role="status" aria-live="polite"></div>
-  <div id="toast" role="status"></div>
-  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
-
-  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
-    <button class="icon-button close" aria-label="Close">×</button>
-    <span class="eyebrow">Behind the image</span>
-    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
-    <p>The time-dependent Schrödinger equation is solved live on a 256 × 128 grid (128 × 64 units) with the split-step Fourier method: free motion is done exactly in momentum space with fast Fourier transforms, and the potential is applied as two half-step phase kicks. Each part conserves probability.</p>
-    <span class="eq">iħ ∂ψ/∂t = −(ħ²/2m) ∇²ψ + V ψ,   with ħ = m = 1</span>
-
-    <h3>What you see</h3>
-    <p>Height is the probability density |ψ|² (raised to the power 0.7 and auto-scaled so that faint waves stay visible). Colour is the complex phase of ψ, going round the colour wheel once per wavelength; with phase colours off, colour shows brightness only.</p>
-
-    <h3>Measure</h3>
-    <p>Pressing Measure picks a position at random with probability |ψ|², then multiplies ψ by a narrow Gaussian there (width 1.2 units) and renormalises. This models a real position measurement of finite precision: the particle is now localised, and its momentum is uncertain, so it spreads quickly.</p>
-
-    <h3>Double slit</h3>
-    <p>The wall is a potential of height 6 (well above the particle’s energy, ≈ 2) with two gaps. Dots on the screen are drawn at random from |ψ|² along the screen line, at a rate proportional to the probability arriving there, as if electrons were sent one by one. The curve on the screen is the running tally of those dots.</p>
-
-    <h3>Tunnelling</h3>
-    <p>A square barrier 1 unit wide. The readout compares the probability found beyond it with the exact plane-wave transmission, averaged over the packet’s spread of momenta (they agree to about 1% on the fine test grid; the coarser on-screen grid, 0.5 units with time step 0.2, comes within about 2 percentage points).</p>
-
-    <h3>Hydrogen</h3>
-    <p>Exact orbitals ψ = Rₙₗ(r) Y(θ, φ) with real spherical harmonics, the familiar chemistry shapes. Dots are sampled from |ψ|² by rejection sampling. Distances are in Bohr radii (0.053 nm); energies are Eₙ = −13.6 eV / n².</p>
-
-    <p class="honest">Drawn for clarity: colours, the height scale and the dot sizes. With two slits, the height is scaled to the wave beyond the wall, and the much stronger wave in front of it is shown at 30%. The simulations are 2D, and the edges of the grid gently absorb the wave so it does not wrap around; probability that leaves is gone. Spin and relativity are not included.</p>
-
-    <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/III_toc.html" target="_blank" rel="noopener">Feynman Lectures, Volume III</a> · Griffiths, <em>Introduction to Quantum Mechanics</em></p>
-    <span class="version">Theoria · Quantum waves 0.3 · Split-step Fourier, exact hydrogen</span>
-  </dialog>
+  </aside>
 </main>
+<div class="tip" id="tip" role="status"></div>
+
+<dialog class="about" id="notes" aria-labelledby="notes-heading">
+  <button class="pill close" aria-label="Close">×</button>
+  <p class="cap">About the prints</p>
+  <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+  <p>The chamber solves the time-dependent Schrödinger equation live, on a 256 × 128 grid, by the split-step Fourier method: exact for free motion, with the potential applied in two half steps. Units: ħ = m = 1. The wave’s total probability stays 1 except where it leaves through the soft edges of the chamber.</p>
+  <span class="eq">i ∂ψ/∂t = −½ ∇²ψ + V ψ</span>
+  <h3>The print and the plate</h3>
+  <p>The dots in the chamber are a halftone print of |ψ|², the probability of finding the particle there: bigger dots, more likely. The plate on the right records where particles are actually found. Each particle is the same wave; when it reaches the plate it is found at one place, chosen at random with the probability the wave gives (the Born rule). The sideways scatter of dots across the plate is only for visibility; the plate measures height alone.</p>
+  <h3>Look</h3>
+  <p>Looking inside a small circle is a measurement: the particle is found there with probability equal to the wave’s share inside it. If it is found, the rest of the wave vanishes; if not, the part inside vanishes. Either way, the wave is renormalised and carries on.</p>
+  <h3>Orbitals</h3>
+  <p>Hydrogen orbitals are exact solutions, shown as a slice through the nucleus (a Bohr radius is 0.053 nm). “Look” there samples electron positions from |ψ|² in that slice, so the dots build up the orbital’s shape.</p>
+  <h3>Keys</h3>
+  <p>Space pause · F fire one · 1–7 exposures · C crests.</p>
+  <p class="honest">Drawn for clarity: the halftone, the dot scatter on the plate and the slowed-down playback. The chamber is two-dimensional, walls are tall potential steps rather than perfectly hard, and the edges absorb rather than reflect.</p>
+  <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/III_01.html" target="_blank" rel="noopener">Feynman Lectures, Volume III, chapter 1</a> · Griffiths, <em>Introduction to Quantum Mechanics</em></p>
+  <p class="cap" style="margin-top:12px">Theoria · Quantum waves 0.4 · The particle darkroom</p>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>
