@@ -80,12 +80,13 @@ export function interact(d, normal, n1, n2) {
 export function trace(start, direction, elements, {nm = 587.6, maxLength = 200, maxEvents = 40, minWeight = .03, reflections = true} = {}) {
   const segments = [];
   const queue = [{p: start, d: norm(direction), inside: null, weight: 1, t: 0, depth: 0, travelled: 0}];
-  let events = 0;
-  while (queue.length && events < maxEvents * 4) {
+  let count = 0;
+  const events = [];
+  while (queue.length && count < maxEvents * 4) {
     const ray = queue.shift();
     let {p, d, inside, weight, t, depth, travelled} = ray;
     for (let step = 0; step < maxEvents; step++) {
-      events++;
+      count++;
       const n1 = inside ? inside.index(nm) : 1;
       const hit = nearestHit(p, d, inside ? [inside] : elements);
       const s = hit ? hit.s : maxLength - travelled;
@@ -95,9 +96,17 @@ export function trace(start, direction, elements, {nm = 587.6, maxLength = 200, 
       t += n1 * s;
       travelled += s;
       if (!hit || travelled >= maxLength) break;
-      if (hit.element.mirror) { d = interact(d, hit.normal, 1, 1).reflected; p = end; continue; }
+      const main = depth === 0;
+      if (hit.element.absorber) { if (main) events.push({at: end, kind: 'stop', element: hit.element}); break; }
+      if (hit.element.mirror) {
+        const m = interact(d, hit.normal, 1, 1);
+        if (main) events.push({at: end, kind: 'mirror', element: hit.element, normal: hit.normal, dir: d, thetaI: Math.acos(Math.min(1, m.cosI)) * 180 / Math.PI});
+        d = m.reflected; p = end; continue;
+      }
       const next = inside ? null : hit.element;
       const n2 = next ? next.index(nm) : 1, out = interact(d, hit.normal, n1, n2);
+      if (main) events.push({at: end, kind: out.transmitted ? (next ? 'enter' : 'leave') : 'tir', element: hit.element, normal: hit.normal, dir: d, n1, n2,
+        thetaI: Math.acos(Math.min(1, out.cosI)) * 180 / Math.PI, thetaT: out.transmitted ? Math.acos(Math.min(1, out.cosT)) * 180 / Math.PI : null, R: out.R});
       if (out.transmitted) {
         if (reflections && weight * out.R >= minWeight && depth < 3) {
           queue.push({p: end, d: out.reflected, inside, weight: weight * out.R, t, depth: depth + 1, travelled});
@@ -107,6 +116,7 @@ export function trace(start, direction, elements, {nm = 587.6, maxLength = 200, 
       p = end;
     }
   }
+  segments.events = events;
   return segments;
 }
 
@@ -207,3 +217,36 @@ export function axisCrossing(segments, xFrom) {
 
 /** Critical angle (degrees) for light going from glass of index n into air. */
 export const criticalAngle = n => Math.asin(1 / n) * 180 / Math.PI;
+
+// ---------------------------------------------------------------- the bench: placing parts, mirrors and screens
+
+/**
+ * A copy of an element (built around the origin) moved to (x, y) and turned by `angle` radians anticlockwise.
+ * Straight pieces are mapped end to end; arcs keep their radius, and their `keep` test is applied in the
+ * element's own frame, so they stay exact.
+ */
+export function place(element, x, y, angle = 0) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const fwd = ([px, py]) => [x + c * px - s * py, y + s * px + c * py];
+  const inv = ([qx, qy]) => { const dx = qx - x, dy = qy - y; return [c * dx + s * dy, -s * dx + c * dy]; };
+  const pieces = element.pieces.map(p => p.type === 'line' ? line(fwd(p.a), fwd(p.b)) : arc(fwd(p.centre), p.r, q => p.keep(inv(q))));
+  return {...element, pieces, outline: element.outline?.map(fwd), placed: {x, y, angle}};
+}
+
+const air = () => 1;
+/** A flat mirror of length L along the y axis (silvered on both sides). */
+export const flatMirror = L => ({name: 'mirror', mirror: true, index: air, pieces: [line([0, -L / 2], [0, L / 2])], outline: [[0, -L / 2], [0, L / 2]]});
+
+/**
+ * A concave spherical mirror with its vertex at the origin, facing −x (light arriving from the left is reflected
+ * back), radius of curvature R and half-height h. Paraxial focus at (−R/2, 0).
+ */
+export function curvedMirror(R, h) {
+  const keep = q => Math.abs(q[1]) <= h + 1e-9 && q[0] > -R;
+  const a = Math.asin(Math.min(1, h / R)), outline = [];
+  for (let k = 0; k <= 40; k++) { const t = -a + 2 * a * k / 40; outline.push([-R + R * Math.cos(t), R * Math.sin(t)]); }
+  return {name: 'curved mirror', mirror: true, index: air, R, pieces: [arc([-R, 0], R, keep)], outline};
+}
+
+/** A screen of length L along the y axis: light that reaches it stops there. */
+export const screen = L => ({name: 'screen', absorber: true, index: air, pieces: [line([0, -L / 2], [0, L / 2])], outline: [[0, -L / 2], [0, L / 2]]});

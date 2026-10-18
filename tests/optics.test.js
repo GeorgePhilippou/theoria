@@ -79,3 +79,38 @@ test('light entering a fibre end at a shallow angle is trapped by total internal
   const exit = segs.at(-1);
   assert.ok(exit.a[0] > 59.5, `the light leaves through the far end (x = ${exit.a[0]})`);
 });
+
+test('a placed, rotated part bends light exactly as the original, rotated', () => {
+  const a = deg(30), rot = ([x, y]) => [Math.cos(a) * x - Math.sin(a) * y, Math.sin(a) * x + Math.cos(a) * y];
+  const block = op.slab(-3, 3, -5, 5, {nd: 1.5}), turned = op.place(block, 0, 0, a);
+  const d0 = [Math.cos(deg(20)), Math.sin(deg(20))], s0 = [-12, -2];
+  const ref = op.trace(s0, d0, [block]), got = op.trace(rot(s0), rot(d0), [turned]);
+  const end = g => g.filter(x => x.depth === 0).at(-1).b;
+  const e1 = rot(end(ref)), e2 = end(got);
+  close(e1[0], e2[0], 1e-9); close(e1[1], e2[1], 1e-9);
+  // A lens's curved faces survive the move: still focuses at the lensmaker's focal length from its new place.
+  const L = op.place(op.lens(0, 3.4, 5, 10, -10, {nd: 1.5}), 5, 2, 0), f = op.lensFocus(1.5, 10, -10, 3.4);
+  const seg = op.trace([-20, 2 + .3], [1, 0], [L]);
+  close(op.axisCrossing(seg.map(g => ({...g, a: [g.a[0], g.a[1] - 2], b: [g.b[0], g.b[1] - 2]})), 5), 5 + 1.7 + f.back, .05);
+});
+
+test('mirrors reflect at equal angles, a concave mirror focuses at R/2, and a screen stops light', () => {
+  const m = op.place(op.flatMirror(10), 0, 0, deg(-45));   // tilted mirror at the origin
+  const seg = op.trace([-10, 0], [1, 0], [m]);
+  const out = seg.filter(g => g.depth === 0)[1], dir = [out.b[0] - out.a[0], out.b[1] - out.a[1]];
+  close(Math.abs(angleOf(dir)), 90, 1e-9, 'turned through a right angle');
+  close(seg.events[0].thetaI, 45, 1e-9);
+  const cm = op.curvedMirror(20, 3), back = op.trace([-30, .4], [1, 0], [cm]), r = back.filter(g => g.depth === 0)[1];
+  const t = -r.a[1] / (r.b[1] - r.a[1]), x = r.a[0] + t * (r.b[0] - r.a[0]);
+  close(x, -10, .05, 'paraxial focus at R/2');
+  const stop = op.trace([-10, 0], [1, 0], [op.screen(4)]);
+  assert.equal(stop.length, 1); assert.equal(stop.events[0].kind, 'stop');
+});
+
+test('the ray log records angles that obey Snell’s law', () => {
+  const seg = op.trace([-10, -3], [Math.cos(deg(25)), Math.sin(deg(25))], [op.slab(-2, 2, -10, 10, {nd: 1.5})]);
+  const [enter, leave] = seg.events;
+  assert.equal(enter.kind, 'enter'); assert.equal(leave.kind, 'leave');
+  close(Math.sin(deg(enter.thetaI)), 1.5 * Math.sin(deg(enter.thetaT)), 1e-9);
+  close(leave.thetaT, enter.thetaI, 1e-9, 'parallel on the way out');
+});

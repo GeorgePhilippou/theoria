@@ -4,124 +4,82 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#ece4d2">
-<meta name="description" content="Exact ray tracing through glass: watch light slow down, bend by Snell's law, get trapped in a fibre, focus through a lens and split into a spectrum.">
+<meta name="description" content="An optical drafting bench: place and turn blocks, prisms, lenses, mirrors and screens, aim lasers and lamps, and trace every ray exactly with Snell's law, total internal reflection and dispersion.">
 <title>Rays and Lenses · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Rays and Lenses · Theoria">
-<meta property="og:description" content="Exact ray tracing through glass: watch light slow down, bend by Snell's law, get trapped in a fibre, focus through a lens and split into a spectrum.">
+<meta property="og:description" content="An optical drafting bench with exact ray tracing: refraction, total internal reflection, lenses, mirrors and dispersion.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="../shared/shell.css">
-<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="drafting.css">
 </head>
-<body class="v2 riso">
-<main class="stage" aria-label="Rays and lenses experiment">
-  <canvas id="scene" aria-label="3D view of light rays passing through glass on an optical bench"></canvas>
-
-  <header class="topbar">
-    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Optics · Rays and lenses</span></a>
-    <nav class="view-switch" aria-label="View">
-      <button id="view-bench" class="active" aria-pressed="true">Bench</button>
-      <button id="view-top" aria-pressed="false">Top</button>
-    </nav>
-    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-    </button>
-    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+<body>
+<main class="desk" aria-label="Optical drafting bench">
+  <header class="top">
+    <a class="mark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Rays and lenses · drafting bench</span></a>
+    <div class="group" role="group" aria-label="Show on the bench">
+      <button class="tab on" id="t-angles" aria-pressed="true">Angles</button>
+      <button class="tab" id="t-reflect" aria-pressed="false">Weak reflections</button>
+      <button class="tab on" id="t-pulses" aria-pressed="true">Pulses</button>
+    </div>
+    <button class="tab" id="restart">Restart</button>
+    <button class="tab" id="about" aria-label="What is calculated, and how" title="The physics">i</button>
+    <a class="next wide-only" href="../quantum/">Next: Quantum waves →</a>
   </header>
 
-  <section class="story glass" id="story" aria-live="polite"></section>
-
-  <div class="labels" aria-hidden="true">
-    <div class="scene-label landmark" id="label-glass"><div class="tag"><span class="name" id="label-glass-text">Glass</span></div></div>
-    <div class="scene-label landmark" id="label-normal"><div class="tag"><span class="name">Normal</span></div></div>
-    <div class="scene-label landmark" id="label-a1"><div class="tag"><span class="name" id="label-a1-text"></span></div></div>
-    <div class="scene-label landmark" id="label-a2"><div class="tag"><span class="name" id="label-a2-text"></span></div></div>
-    <div class="scene-label landmark" id="label-focus"><div class="tag"><span class="name">F</span></div></div>
-    <div class="scene-label landmark" id="label-object"><div class="tag"><span class="name">Object</span></div></div>
-    <div class="scene-label landmark" id="label-image"><div class="tag"><span class="name" id="label-image-text">Image</span></div></div>
-    <div class="scene-label landmark" id="label-screen"><div class="tag"><span class="name">Screen</span></div></div>
-    <div class="scene-label curve" id="label-wavefront"><div class="tag"><span class="name">Wavefronts</span></div></div>
-  </div>
-
-  <section class="readout glass" id="readout" aria-label="Measurements">
-    <div class="readout-row"><i class="swatch" style="--c:#3b4419"></i><span class="who"><span id="r1-name"></span><small id="r1-note"></small></span><strong id="r1" class="text-value"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#c8541f"></i><span class="who"><span id="r2-name"></span><small id="r2-note"></small></span><strong id="r2" class="text-value"></strong></div>
-    <div class="readout-row"><i class="swatch" style="--c:#8a8c68"></i><span class="who"><span id="r3-name"></span><small id="r3-note"></small></span><strong id="r3" class="text-value"></strong></div>
+  <section class="bench" aria-label="The bench">
+    <div class="frame"><canvas id="c-bench" aria-label="Drafting bench with glass parts, mirrors, light sources and traced rays"></canvas></div>
   </section>
 
-  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
-    <span class="eyebrow">Show</span>
-    <div class="chips">
-      <button class="chip" data-layer="pulses" aria-pressed="false"><i class="swatch" style="--c:#3b4419"></i>Pulses of light</button>
-      <button class="chip" data-layer="wavefronts" aria-pressed="false"><i class="swatch" style="--c:#c8541f"></i>Wavefronts</button>
-      <button class="chip" data-layer="reflections" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Partial reflections</button>
-      <button class="chip" data-layer="angles" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>Normals and angles</button>
+  <section class="tray" aria-label="Parts tray: click to add to the bench">
+    <span class="letter">Parts</span>
+    <button class="part" data-add="block"><svg viewBox="0 0 52 34"><rect x="14" y="4" width="24" height="26" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Block</small></button>
+    <button class="part" data-add="prism"><svg viewBox="0 0 52 34"><path d="M26 3L42 31H10Z" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Prism</small></button>
+    <button class="part" data-add="convex"><svg viewBox="0 0 52 34"><path d="M26 2Q36 17 26 32Q16 17 26 2Z" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Convex lens</small></button>
+    <button class="part" data-add="concave"><svg viewBox="0 0 52 34"><path d="M19 2H33Q27 17 33 32H19Q25 17 19 2Z" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Concave lens</small></button>
+    <button class="part" data-add="halfdisc"><svg viewBox="0 0 52 34"><path d="M20 3A14 14 0 0 1 20 31Z" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Half disc</small></button>
+    <button class="part" data-add="fibre"><svg viewBox="0 0 52 34"><rect x="3" y="14" width="46" height="6" fill="#c9c9a3" stroke="#2f3614" stroke-width="1.5"/></svg><small>Fibre</small></button>
+    <button class="part" data-add="mirror"><svg viewBox="0 0 52 34"><path d="M26 3V31" stroke="#2f3614" stroke-width="3"/><path d="M27 6l4 3M27 12l4 3M27 18l4 3M27 24l4 3" stroke="#2f3614"/></svg><small>Mirror</small></button>
+    <button class="part" data-add="cmirror"><svg viewBox="0 0 52 34"><path d="M24 3Q34 17 24 31" fill="none" stroke="#2f3614" stroke-width="3"/></svg><small>Curved mirror</small></button>
+    <button class="part" data-add="screen"><svg viewBox="0 0 52 34"><path d="M26 3V31" stroke="#2f3614" stroke-width="3" stroke-dasharray="4 3"/></svg><small>Screen</small></button>
+    <button class="part source" data-add="laser"><svg viewBox="0 0 52 34"><rect x="4" y="12" width="18" height="10" fill="#2f3614"/><path d="M22 17H48" stroke="#c8541f" stroke-width="2"/></svg><small>Laser</small></button>
+    <button class="part source" data-add="beam"><svg viewBox="0 0 52 34"><rect x="4" y="5" width="8" height="24" fill="#2f3614"/><path d="M12 9H48M12 17H48M12 25H48" stroke="#c8541f" stroke-width="1.5"/></svg><small>Beam</small></button>
+    <button class="part source" data-add="lamp"><svg viewBox="0 0 52 34"><circle cx="10" cy="17" r="5" fill="#2f3614"/><path d="M15 17L48 6M15 17H48M15 17L48 28" stroke="#c8541f" stroke-width="1.5"/></svg><small>Lamp</small></button>
+  </section>
+
+  <aside class="sheet" aria-label="Specification sheet">
+    <div class="block">
+      <p class="letter"><span>Plates</span><span>Sheet 1 of 1</span></p>
+      <div class="plates" id="plates"></div>
     </div>
-    <details class="settings" open>
-      <summary>Settings</summary>
-      <label><span>Light speed on screen <output id="out-rate"></output></span>
-        <input id="rate" type="range" min="0" max="3" step="1" value="1" aria-label="Animation speed"></label>
-      <p class="hint">Distances in centimetres. The real light would cross the bench in about a nanosecond.</p>
-    </details>
+    <div class="block note" id="note" aria-live="polite"></div>
+    <div class="block" id="selected"></div>
+    <div class="block">
+      <p class="letter"><span>Ray log</span><span id="log-who"></span></p>
+      <div id="log"></div>
+    </div>
   </aside>
-
-  <footer class="transport dock glass" id="transport">
-    <button id="play" class="round-button" aria-label="Pause"></button>
-    <div class="dock-group experiment">
-      <span class="dock-label">Experiment</span>
-      <div class="segmented" role="group" aria-label="Experiment">
-        <button data-experiment="slab">Slab</button>
-        <button data-experiment="refract">Refract</button>
-        <button data-experiment="fibre">Fibre</button>
-        <button data-experiment="lens">Lens</button>
-        <button data-experiment="prism">Prism</button>
-      </div>
-    </div>
-    <div class="dock-group speed" id="param-group">
-      <span class="dock-label"><span id="param-name"></span> <output id="out-param"></output></span>
-      <input id="param" type="range" min="0" max="1" step="0.5" value="0.5" aria-label="Experiment setting">
-    </div>
-    <div class="dock-group speed">
-      <span class="dock-label">Glass n <output id="out-n"></output></span>
-      <input id="index" type="range" min="1.3" max="2.42" step="0.01" value="1.5" aria-label="Refractive index of the glass">
-    </div>
-    <div class="dock-actions">
-      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
-    </div>
-  </footer>
-  <div id="tip" role="status" aria-live="polite"></div>
-  <div id="toast" role="status"></div>
-  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
-
-  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
-    <button class="icon-button close" aria-label="Close">×</button>
-    <span class="eyebrow">Behind the image</span>
-    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
-    <p>Every ray is traced exactly through the glass in two dimensions. At each surface, flat or curved, the new direction comes from Snell’s law in vector form, with the exact surface normal; when no refracted ray exists, the light is totally reflected. Curved surfaces are true circular arcs, not polygons.</p>
-    <span class="eq">n₁ sin θ₁ = n₂ sin θ₂</span>
-
-    <h3>Speed</h3>
-    <p>Light travels at c / n in glass. The pulses move along each ray at that speed, so they bunch up inside glass, and the lines joining pulses that left together are the wavefronts. Each ray takes the path of least time between its ends (Fermat’s principle).</p>
-
-    <h3>Partial reflection</h3>
-    <p>At each surface some light is reflected, as given by the Fresnel equations for unpolarised light: about 4% for glass of n = 1.5 at normal incidence, rising towards 100% at grazing angles. Reflected rays are drawn fainter in proportion, and followed while they keep at least 3% of the light.</p>
-
-    <h3>Glass and colour</h3>
-    <p>The slider sets the index n at 587.6 nm (yellow). Other colours use a Cauchy formula fitted to crown glass (Abbe number about 64), so violet is bent more than red. The prism is dense flint glass, with 2.6 times the dispersion (Abbe number about 25), as in most demonstration prisms. Ray colours are the colours of those wavelengths (approximately, on a screen).</p>
-
-    <h3>Lens and image</h3>
-    <p>The lens is a thick biconvex lens with spherical surfaces. Its focal length is checked against the lensmaker’s equation. The image is placed where the traced rays nearest the axis cross; rays through the edge of the lens cross noticeably short (spherical aberration, strong for so curved a lens). The lens formula 1/u + 1/v = 1/f is applied with u and v measured from the lens’s principal planes, as it must be for a thick lens.</p>
-
-    <h3>Touch and keys</h3>
-    <p>Drag to orbit, pinch or scroll to zoom. Keys: Space pause, 1–5 experiments, T Bench/Top.</p>
-
-    <p class="honest">Drawn for clarity: the thickness of the glass blocks, the printed look of rays and pulses, the pulse spacing and the speed of the animation (real light would cross the bench in about a nanosecond). The optics are two-dimensional (a slice through the middle of each element), so they show exactly how rays bend but not effects of the third dimension. Diffraction and interference, the wave side of light, are on the Light as a wave page.</p>
-
-    <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/I_26.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 26</a> · Hecht, <em>Optics</em></p>
-    <span class="version">Theoria · Rays and lenses 0.1 · Exact 2D ray tracing</span>
-  </dialog>
 </main>
+<div class="tip" id="tip" role="status"></div>
+
+<dialog class="about" id="notes" aria-labelledby="notes-heading">
+  <button class="tab close" aria-label="Close">×</button>
+  <p class="letter">Notes on the drawing</p>
+  <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+  <p>Every ray is traced exactly in two dimensions. At each surface, flat or curved, the new direction comes from Snell’s law in vector form with the exact surface normal; curved surfaces are true circular arcs, however the part is moved or turned. When no refracted ray exists, the light is totally reflected. Mirrors reflect at equal angles; screens stop the light.</p>
+  <span class="eq">n₁ sin θ₁ = n₂ sin θ₂</span>
+  <h3>Glass</h3>
+  <p>Each part has its own glass. Crown (n = 1.52), flint (1.62, about 2.6 times the dispersion), water (1.33) and diamond (2.42), or any index you set. Other colours use a Cauchy formula, so violet is bent more than red. White light is traced as seven colours.</p>
+  <h3>Weak reflections and pulses</h3>
+  <p>Some light is always reflected at glass, as given by the Fresnel equations (about 4% head-on). Turn on <b>Weak reflections</b> to see those rays, drawn fainter in proportion. <b>Pulses</b> are short bursts of light moving along each ray at c/n, so you can see light slow down in glass.</p>
+  <h3>Ray log</h3>
+  <p>For the selected source (or the first one), the log lists each surface its central ray meets: the angles to the normal on the way in and out, and how much is reflected there. Angles are measured from the normal, the line at right angles to the surface.</p>
+  <h3>Hands and keys</h3>
+  <p>Drag a part to move it, drag its round handle to turn it (it snaps every 5°). Arrows nudge, [ and ] turn, Delete removes. 1–9 choose a plate.</p>
+  <p class="honest">Drawn for clarity: line widths, the hatching of glass and the slow pulses (real light would cross the bench in a nanosecond). The bench is a flat slice: it shows exactly how rays bend, but not effects of the third dimension, and not diffraction or interference, which are on the Light as a wave page.</p>
+  <p>Further reading: <a href="https://www.feynmanlectures.caltech.edu/I_26.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 26</a> · Hecht, <em>Optics</em></p>
+  <p class="letter" style="margin-top:12px">Theoria · Rays and lenses 0.2 · Drafting bench</p>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>
