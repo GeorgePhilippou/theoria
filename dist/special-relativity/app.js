@@ -1,782 +1,629 @@
-// Special relativity: a ship with a light clock, Earth, a flash, and switchable frames.
-// Every event is computed once in Earth's frame (physics.js) and drawn in the chosen frame.
-import * as THREE from 'three';
-import {createStage, INK, inkFade} from '../shared/stage.js';
-import {$, toast, setPressed, reducedMotion, createTransport, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
+// Special relativity: the relativity railway. One world, described in the platform frame S, shown from any frame w:
+// the track (everything at one moment of your time) above a spacetime diagram that shares its x axis.
 import * as sr from './physics.js';
-import {steps} from './story.js';
+import {routes} from './scenarios.js';
 
-const T_MAX = 26;          // timeline length in the chosen frame, s
-const L0 = 4;              // ship rest length, ls
-const CLOCK_L = .5;        // light-clock mirror separation: one tick = 1 s of ship time
-const FLASH_TAU = 4;       // ship time of the flash
-const TURN_AT = 10;        // Earth time of the turnaround on a round trip
-const DECK = .2;           // height of the ship's deck, where the light clock sits
-const EARTH_R = .42;       // drawn radius of Earth (not to scale)
-const COLOR = {
-  // Paper palette: Earth burnt orange, the ship olive, light (photon, flash, light cone) in dark ink.
-  earth: INK.spot, ship: INK.olive, photon: INK.dark, flash: INK.dark, grid: INK.olive, cone: INK.dark, hull: INK.paper2,
+const $ = id => document.getElementById(id);
+const C = {
+  ink: '#2f3614', ink2: '#454d22', ink3: '#6a6f45', ink4: '#8a8c68', olive: '#56612a', oliveDark: '#3b4419', spot: '#c8541f',
+  spotTint: '#e9b99a', oliveTint: '#c9c9a3', paper: '#ece4d2', paper2: '#f4eee0', board: '#262b12', flap: '#f0a35e', rule: 'rgba(86,97,42,.14)',
+};
+const PALETTE = [C.spot, C.olive, '#9a5a1c', C.oliveDark, C.ink3, '#a8432b'];
+const PAD = {l: 36, r: 12};
+const HINTS = {
+  move: 'Drag an event to move it, or a train’s round handle to change its speed. Drag empty space to pan.',
+  train: 'Click in the diagram: a new train passes that event at the speed below, measured in your frame.',
+  flash: 'Click in the diagram to set off a flash of light there. It spreads both ways at c.',
+  mark: 'Click in the diagram to mark an event, then tap two events on the board to compare them.',
 };
 
-const settings = {v: .6, roundTrip: false};
-const layers = {clock: false, flash: false, simultaneity: false, invariants: false};
-const narrow = () => innerWidth <= 720;
-let blend = 0, targetBlend = 0;    // 0 = Space view, 1 = Time view
-let phi = 0, targetPhi = 0;        // rapidity of the frame we are viewing from
-let frameName = 'earth', spaceFraming = 'overview';
-let trip, centreEvents, centreTaus, photonEvents, flash, backEvents, frontEvents, candidates = [];
-const earthEvents = [[0, 0, 0], [400, 0, 0]];
+// ---------------------------------------------------------------- the world
+const lab = {
+  bodies: [], tunnels: [], events: [], route: null, select: [],
+  w: 0, wTarget: 0, ride: 'Platform', T: 0, playing: true, speed: 1.5, tool: 'move', cx: 0, cxTarget: 0, newV: .6,
+  show: {nows: true, hyper: true}, colorIndex: 0,
 
-// ---------------------------------------------------------------- stage
-const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
-  viewShift: () => {
-    if (!narrow()) return [24, 0];
-    const top = $('story').getBoundingClientRect().bottom;
-    const below = [$('readout'), $('transport')].find(el => el.offsetParent);
-    return [0, Math.round((top + below.getBoundingClientRect().top) / 2 - innerHeight / 2)];
+  addTrain({name, v = 0, L0 = 4, x0 = 0, legs, lightClock = false, ship = false}) {
+    legs ??= [{t0: 0, x0, u: v, tau0: 0, forever: true, label: name}];
+    const body = {name, L0, ship, lightClock, color: PALETTE[this.colorIndex++ % PALETTE.length], legs: sr.chainLegs(legs)};
+    this.bodies.push(body);
+    return body;
   },
-});
-const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 3, maxDistance: 140});
-const group = {};
-for (const name of ['base', 'time', 'bodies', ...Object.keys(layers)]) scene.add(group[name] = new THREE.Group());
-
-// Display coordinates [t′, x′, y] → world [x, height, depth]. Space view flattens time.
-const toWorld = (t, x, y, lift = 0) => [x, t * blend + lift, y];
-const display = e => sr.boost(e, phi);
-const shipFrame = e => sr.boost(e, sr.rapidity(settings.v));
-
-// ---------------------------------------------------------------- the floor and the time axis
-function thinLines(flat, color, opacity, parent) {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
-  const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({color, transparent: true, opacity, depthWrite: false}));
-  lines.userData.opacity = opacity;
-  parent.add(lines);
-  return lines;
-}
-// Space of the chosen frame: a band along the line of motion. In Time view it rides up with "now".
-const floor = new THREE.Group();
-group.base.add(floor);
-{
-  const minor = [], major = [];
-  for (let x = -40; x <= 40; x++) (x % 5 ? minor : major).push(x, 0, -3, x, 0, 3);
-  for (const y of [-3, 3]) major.push(-40, 0, y, 40, 0, y);
-  thinLines(minor, COLOR.grid, .09, floor);
-  thinLines(major, COLOR.grid, .26, floor);
-}
-// Time axis on a back wall, in Time view.
-thinLines(Array.from({length: 5}, (_, i) => [-60, (i + 1) * 5, -3, 60, (i + 1) * 5, -3]).flat(), COLOR.grid, .22, group.time);
-
-// ---------------------------------------------------------------- invariants (the same in every frame)
-const CONE_H = 18;
-const coneMaterial = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, side: THREE.DoubleSide,
-  uniforms: {color: {value: new THREE.Color(INK.oliveTint)}, strength: {value: 0}},
-  vertexShader: 'varying float vH; void main() { vH = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform vec3 color; uniform float strength; varying float vH;
-    void main() { float h = vH / ${CONE_H.toFixed(1)};
-      float a = strength * (0.22 * (1.0 - h) + 0.12 * smoothstep(0.9, 1.0, fract(vH / 2.0)) * (1.0 - h));
-      gl_FragColor = vec4(pow(color, vec3(2.2)), a); }`,
-});
-{
-  const geometry = new THREE.ConeGeometry(CONE_H, CONE_H, 128, 12, true);
-  geometry.rotateX(Math.PI);
-  geometry.translate(0, CONE_H / 2, 0);
-  group.invariants.add(new THREE.Mesh(geometry, coneMaterial));
-}
-const nullLines = stage.line({color: COLOR.cone, width: 1.6, opacity: .55, dashed: true, dash: [.45, .3], segments: true, parent: group.invariants})
-  .set([0, 0, 0, -T_MAX, T_MAX, 0, 0, 0, 0, T_MAX, T_MAX, 0]);
-const hyperbolae = [4, 8, 12, 16, 20].map(s => {
-  const pts = [];
-  for (let x = -40; x <= 40; x += .2) { const t = Math.hypot(s, x); if (t <= T_MAX + 2) pts.push(x, t, 0); }
-  // τ = 8 s is drawn brightest: the tour compares the clocks' 8th ticks on it.
-  return stage.line({color: s === 8 ? INK.spot : COLOR.cone, width: s === 8 ? 2.6 : s % 8 === 0 ? 1.8 : 1.2, opacity: s === 8 ? .85 : s % 8 === 0 ? .6 : .32, parent: group.invariants}).set(pts);
-});
-
-// ---------------------------------------------------------------- Earth
-function earthTexture() {
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 256;
-  const ctx = c.getContext('2d');
-  const sea = ctx.createLinearGradient(0, 0, 0, 256);
-  // Printed in two inks: an olive-tint sea with burnt-orange land.
-  sea.addColorStop(0, '#b9bb8e'); sea.addColorStop(.5, '#a9ac7b'); sea.addColorStop(1, '#b9bb8e');
-  ctx.fillStyle = sea;
-  ctx.fillRect(0, 0, 512, 256);
-  let seed = 3;
-  const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-  for (let i = 0; i < 26; i++) {
-    const x = random() * 512, y = 50 + random() * 156, r = 14 + random() * 40;
-    for (let j = 0; j < 9; j++) {
-      ctx.fillStyle = j % 3 ? '#d98a5f' : '#c8541f';
-      ctx.beginPath();
-      ctx.ellipse(x + (random() - .5) * r * 1.6, y + (random() - .5) * r, r * (.3 + random() * .5), r * (.2 + random() * .35), random() * 3, 0, Math.PI * 2);
-      ctx.fill();
+  addTunnel(t) { this.tunnels.push(t); },
+  addEvent(e) { this.events.push({light: false, ...e}); },
+  find(name) { return this.bodies.find(b => b.name === name); },
+  /** A body's velocity relative to your frame, on the leg it is on now. */
+  rel(body) { const now = this.bodyNow(body); return sr.relativeVelocity((now?.leg ?? body.legs.at(-1)).u, this.w); },
+  relV(u) { return sr.relativeVelocity(u, this.w); },
+  bodyNow(body, xi = 0, T = this.T) { return sr.bodyAtNow(body.legs, this.w, T, xi); },
+  eventIn(name) { const e = this.events.find(x => x.name === name); return e && sr.toFrame([e.t, e.x], this.w); },
+  /** Reading of the platform clock at S position x, at this moment of your frame. */
+  stationAt(x, T = this.T) { return T / sr.gamma(this.w) + this.w * x; },
+  frames() {
+    const list = [{name: 'Platform', w: 0}];
+    for (const b of this.bodies) {
+      const moving = b.legs.filter(l => l.u !== 0);
+      for (const l of moving) if (!list.some(x => Math.abs(x.w - l.u) < 1e-9)) list.push({name: moving.length > 1 ? `${b.name}, ${l.label}` : b.name, w: l.u, body: b, leg: l});
     }
-  }
-  ctx.fillStyle = 'rgba(244,238,224,.95)';
-  ctx.fillRect(0, 0, 512, 16);
-  ctx.fillRect(0, 240, 512, 16);
-  const texture = new THREE.CanvasTexture(c);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-const earth = {group: new THREE.Group()};
-earth.globe = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 32), new THREE.MeshStandardMaterial({map: earthTexture(), roughness: .85}));
-earth.globe.rotation.z = .41;
-// On paper there is no glowing atmosphere: the globe is printed flat in two inks.
-earth.atmosphere = new THREE.Group();
-// Earth's clock: a bead that goes once round the ring per second of Earth's own time.
-earth.ring = new THREE.Mesh(new THREE.RingGeometry(EARTH_R * 1.45, EARTH_R * 1.55, 96), new THREE.MeshBasicMaterial({
-  color: COLOR.earth, side: THREE.DoubleSide, transparent: true, opacity: .75, depthWrite: false,
-}));
-earth.ring.rotation.x = -Math.PI / 2;
-earth.bead = new THREE.Mesh(new THREE.SphereGeometry(.055, 16, 8), new THREE.MeshBasicMaterial({color: INK.dark}));
-earth.beadGlow = stage.sprite(COLOR.earth, .45, earth.group);
-earth.group.add(earth.globe, earth.atmosphere, earth.ring, earth.bead);
-group.bodies.add(earth.group);
-
-// ---------------------------------------------------------------- the ship
-const ship = {group: new THREE.Group(), hull: new THREE.Group()};
-{
-  const shape = new THREE.Shape();
-  shape.moveTo(2.1, 0);
-  shape.bezierCurveTo(1.9, .34, 1.25, .5, .6, .52);
-  shape.lineTo(-1.6, .56);
-  shape.lineTo(-2, .44);
-  shape.lineTo(-2, -.44);
-  shape.lineTo(-1.6, -.56);
-  shape.lineTo(.6, -.52);
-  shape.bezierCurveTo(1.25, -.5, 1.9, -.34, 2.1, 0);
-  const geometry = new THREE.ExtrudeGeometry(shape, {depth: .14, bevelEnabled: true, bevelThickness: .05, bevelSize: .05, bevelSegments: 4, curveSegments: 32});
-  geometry.rotateX(Math.PI / 2);
-  geometry.translate(0, .1, 0);
-  ship.hull.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({color: COLOR.hull, metalness: .6, roughness: .32})));
-  const outline = shape.getPoints(40).flatMap(p => [p.x, DECK - .03, p.y]);
-  stage.line({color: COLOR.ship, width: 1.6, opacity: .9, parent: ship.hull}).set([...outline, ...outline.slice(0, 3)]);
-  for (const z of [-.26, .26]) {
-    const engine = new THREE.Mesh(new THREE.CylinderGeometry(.11, .13, .18, 24), new THREE.MeshStandardMaterial({
-      color: INK.oliveTint, metalness: 0, roughness: .9,
-    }));
-    engine.rotation.z = Math.PI / 2;
-    engine.position.set(-2.06, .02, z);
-    ship.hull.add(engine);
-  }
-  // The light clock on deck: two mirrors facing each other across the ship.
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(.8, .02, CLOCK_L + .22), new THREE.MeshStandardMaterial({color: INK.oliveTint, metalness: 0, roughness: .9}));
-  plate.position.y = DECK;
-  ship.hull.add(plate);
-  for (const z of [-CLOCK_L / 2 - .03, CLOCK_L / 2 + .03]) {
-    const mirror = new THREE.Mesh(new THREE.BoxGeometry(.62, .16, .04), new THREE.MeshStandardMaterial({
-      color: INK.dark, metalness: 0, roughness: .6,
-    }));
-    mirror.position.set(0, DECK + .08, z);
-    ship.hull.add(mirror);
-  }
-  ship.group.add(ship.hull);
-  group.bodies.add(ship.group);
-}
-const photon = {
-  core: new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 8), new THREE.MeshBasicMaterial({color: INK.dark})),
-  glow: stage.sprite(COLOR.photon, .9, group.clock),
-  trail: stage.line({width: 2.6, vertexColors: true, additive: true, parent: group.clock}),
+    return list;
+  },
+  clear() { this.bodies = []; this.tunnels = []; this.events = []; this.select = []; this.colorIndex = 0; },
 };
-group.clock.add(photon.core);
+const f2 = x => (Math.abs(x) < 5e-3 ? 0 : x).toFixed(2);
 
-// ---------------------------------------------------------------- worldlines, ticks, flash, "now" sheets
-const worldline = {
-  earth: stage.line({color: COLOR.earth, width: 3, parent: group.bodies}),
-  ship: stage.line({color: COLOR.ship, width: 3, parent: group.bodies}),
-  earthFuture: stage.line({color: COLOR.earth, width: 1.4, opacity: .3, dashed: true, dash: [.4, .35], parent: group.time}),
-  shipFuture: stage.line({color: COLOR.ship, width: 1.4, opacity: .3, dashed: true, dash: [.4, .35], parent: group.time}),
-};
-function tickMesh(color) {
-  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.11, 16, 8), new THREE.MeshBasicMaterial({color, transparent: true}), 64);
-  mesh.count = 0;
-  mesh.frustumCulled = false;
-  group.time.add(mesh);
-  return mesh;
+// ---------------------------------------------------------------- canvases and the shared x axis
+const figs = {};
+for (const id of ['track', 'diag']) {
+  const canvas = $(`c-${id}`);
+  figs[id] = {canvas, ctx: canvas.getContext('2d'), w: 1, h: 1};
+  new ResizeObserver(() => {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
+    Object.assign(figs[id], {w: r.width, h: r.height, dpr});
+    draw();
+  }).observe(canvas);
 }
-const ticks = {earth: tickMesh(INK.spot), ship: tickMesh(INK.olive)};
-const inked = new THREE.Color();
-const hover = stage.sprite(INK.spot, 1.1, scene, {opacity: 0});
-
-const flashView = {
-  ring: stage.line({color: COLOR.flash, width: 2.6, additive: true, parent: group.flash}),
-  rays: stage.line({color: COLOR.flash, width: 2, opacity: .85, segments: true, dashed: true, dash: [.25, .15], parent: group.flash}),
-  emit: stage.sprite(COLOR.flash, 1.2, group.flash),
-  back: stage.sprite(INK.dark, 1.4, group.flash),
-  front: stage.sprite(INK.dark, 1.4, group.flash),
-};
-
-const sheetAlpha = (() => {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 4;
-  const ctx = c.getContext('2d'), g = ctx.createLinearGradient(0, 0, 256, 0);
-  g.addColorStop(0, '#000'); g.addColorStop(.35, '#fff'); g.addColorStop(.65, '#fff'); g.addColorStop(1, '#000');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 256, 4);
-  return new THREE.CanvasTexture(c);
-})();
-function sheet(color) {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
-  geometry.setIndex([0, 1, 2, 0, 2, 3]);
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-    color, alphaMap: sheetAlpha, transparent: true, opacity: .14, side: THREE.DoubleSide, depthWrite: false,
-  }));
-  mesh.frustumCulled = false;
-  group.simultaneity.add(mesh);
-  return {mesh, edge: stage.line({color, width: 2.2, opacity: .9, parent: group.simultaneity})};
+const DIAG = {top: 12, bottom: 26};
+/** Pixels per second (and per light-second): set by the diagram's height, so light is at 45°. */
+function scale() {
+  const [t0, t1] = lab.route.range;
+  return (figs.diag.h - DIAG.top - DIAG.bottom) / (t1 - t0);
 }
-const sheets = {earth: sheet(COLOR.earth), ship: sheet(COLOR.ship)};
+const X = (fig, x) => PAD.l + (fig.w - PAD.l - PAD.r) / 2 + (x - lab.cx) * scale();
+const xOf = (fig, px) => lab.cx + (px - PAD.l - (fig.w - PAD.l - PAD.r) / 2) / scale();
+const Y = t => figs.diag.h - DIAG.bottom - (t - lab.route.range[0]) * scale();
+const tOf = py => lab.route.range[0] + (figs.diag.h - DIAG.bottom - py) / scale();
 
-// The ship's band in spacetime (its back and front worldlines), and the two ways of cutting it:
-// along Earth's "now" and along the ship's own "now". Their lengths are what each frame calls the ship's length.
-const band = {
-  back: stage.line({color: COLOR.ship, width: 1.4, opacity: .55, parent: group.simultaneity}),
-  front: stage.line({color: COLOR.ship, width: 1.4, opacity: .55, parent: group.simultaneity}),
-  cutEarth: stage.line({color: COLOR.earth, width: 4.5, parent: group.simultaneity}),
-  cutShip: stage.line({color: COLOR.ship, width: 4.5, parent: group.simultaneity}),
-};
-const cutLabelAt = {earth: new THREE.Vector3(), ship: new THREE.Vector3()};
-
-// Lamps at the ship's two ends that light when the flash reaches them, and stay lit.
-const lamps = {back: stage.sprite(COLOR.flash, 1, group.flash), front: stage.sprite(COLOR.flash, 1, group.flash)};
-
-// Tick 8 of each clock, highlighted on the τ = 8 s curve they share.
-const eight = {earth: stage.sprite(INK.spot, 1.7, group.invariants), ship: stage.sprite(INK.spot, 1.7, group.invariants)};
-
-// ---------------------------------------------------------------- physics
-function rebuild() {
-  trip = sr.journey({v: settings.v, roundTrip: settings.roundTrip, turnAt: TURN_AT});
-  centreTaus = [...new Set([0, ...trip.legs.map(l => l.tau0), 60])].sort((a, b) => a - b);
-  centreEvents = centreTaus.map(tau => trip.centreAt(tau));
-  photonEvents = sr.lightClock(trip, {L: CLOCK_L, tauMax: 40});
-  flash = sr.shipFlash(trip, {L0, tauEmit: FLASH_TAU});
-  backEvents = centreTaus.map(tau => sr.shipEvent(trip, tau, [0, -L0 / 2]));
-  frontEvents = centreTaus.map(tau => sr.shipEvent(trip, tau, [0, L0 / 2]));
-  candidates = [
-    ...Array.from({length: 40}, (_, n) => ({e: [n + 1, 0, 0], kind: 'earth', title: `Earth’s clock reads ${n + 1} s`})),
-    ...Array.from({length: 40}, (_, n) => ({e: trip.centreAt(n + 1), kind: 'ship', title: `Ship’s clock reads ${n + 1} s`})),
-    {e: flash.emit, title: 'Flash leaves the centre', layer: 'flash'},
-    {e: flash.back, title: 'Light reaches the back', layer: 'flash', light: true},
-    {e: flash.front, title: 'Light reaches the front', layer: 'flash', light: true},
-  ];
-  if (settings.roundTrip) candidates.push({e: trip.centreAt(trip.legs[1].tau0), title: 'The ship turns around'});
-  const g = sr.gamma(settings.v);
-  $('out-v').innerHTML = `${settings.v.toFixed(2)} c<span class="wide-only"> · γ ${g.toFixed(2)}</span>`;
-  $('speed').value = settings.v;
-  $('speed').style.setProperty('--progress', `${(settings.v - .1) / .88 * 100}%`);
-  $('round-trip').checked = settings.roundTrip;
-  $('frame-return').hidden = !settings.roundTrip;
-  if (!settings.roundTrip && frameName === 'return') frameName = 'earth';
-  setFrame(frameName);
+function begin(fig) {
+  const {ctx, dpr, w, h} = fig;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  return ctx;
+}
+function text(ctx, s, x, y, {color = C.ink, align = 'left', weight = 600, size = 11, mono = false, bg = null} = {}) {
+  ctx.font = `${weight} ${size}px ${mono ? '"Space Mono", monospace' : 'Inter, system-ui, sans-serif'}`;
+  const w = ctx.measureText(s).width, x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(x0 - 3, y - size, w + 6, size + 4); }
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, x0, y);
+  return w;
+}
+function arrowHead(ctx, x, y, angle, size, color) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * .8, size * .6); ctx.lineTo(-size * .45, 0); ctx.lineTo(-size * .8, -size * .6); ctx.closePath();
+  ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function dial(ctx, x, y, r, reading, color, {period = 4} = {}) {
+  ctx.fillStyle = C.paper2; ctx.strokeStyle = color; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  const a = 2 * Math.PI * reading / period;     // clockwise from twelve
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.sin(a) * (r - 2.5), y - Math.cos(a) * (r - 2.5)); ctx.stroke();
 }
 
-/** Display events of a worldline up to t′ = now (clipped exactly at now). */
-function pastOf(events, now) {
-  const out = [];
-  for (let i = 0; i < events.length; i++) {
-    const d = display(events[i]);
-    if (d[0] <= now) { out.push(d); continue; }
-    if (i > 0) { const cut = sr.sliceAt([events[i - 1], events[i]], phi, now); if (cut) out.push(cut.slice(0, 3)); }
-    break;
+// ---------------------------------------------------------------- the track
+const TRACK = {roof: 72, floor: 138, rail: 144, platform: 154, clocks: 186};
+function drawTrack() {
+  const fig = figs.track, ctx = begin(fig), {w} = fig, T = lab.T, k = scale();
+  // Distance ruler in your frame.
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1;
+  const x0 = Math.floor(xOf(fig, 0)), x1 = Math.ceil(xOf(fig, w));
+  for (let x = x0; x <= x1; x++) { const px = X(fig, x); ctx.beginPath(); ctx.moveTo(px, 8); ctx.lineTo(px, TRACK.rail - 4); ctx.stroke(); }
+  for (let x = Math.ceil(x0 / 2) * 2; x <= x1; x += 2) text(ctx, `${x}`, X(fig, x), 14, {color: C.ink4, size: 9.5, mono: true, align: 'center', weight: 400});
+  // Sleepers (at rest on the platform, one per light-second) and rails.
+  ctx.strokeStyle = C.ink3; ctx.lineWidth = 3;
+  const sMin = Math.floor(sr.fromFrame([T, xOf(fig, 0)], lab.w)[1]) - 30, sMax = sMin + 90;
+  for (let s = sMin; s <= sMax; s++) {
+    const [t, x] = sr.lineMeetsNow(0, s, 0, lab.w, T), px = X(fig, sr.toFrame([t, x], lab.w)[1]);
+    if (px < -10 || px > w + 10) continue;
+    ctx.beginPath(); ctx.moveTo(px, TRACK.rail - 3); ctx.lineTo(px + 1, TRACK.rail + 8); ctx.stroke();
   }
-  return out;
-}
-/** Display events of a worldline from now to t′ = until. */
-function futureOf(events, now, until) {
-  const out = [], start = sr.sliceAt(events, phi, now), end = sr.sliceAt(events, phi, until);
-  if (!start) return out;
-  out.push(start.slice(0, 3));
-  for (const e of events) { const d = display(e); if (d[0] > now && d[0] < until) out.push(d); }
-  if (end) out.push(end.slice(0, 3));
-  return out;
-}
-const flatWorld = (points, lift = 0) => points.flatMap(([t, x, y]) => toWorld(t, x, y, lift));
-const shipTauAt = index => {
-  const i = Math.min(Math.floor(index), centreTaus.length - 2), f = index - i;
-  return centreTaus[i] + f * (centreTaus[i + 1] - centreTaus[i]);
-};
-
-function setQuad(geometry, corners) {
-  const a = geometry.attributes.position;
-  corners.forEach((c, i) => a.array.set(c, i * 3));
-  a.needsUpdate = true;
-}
-const matrix = new THREE.Matrix4();
-function setTicks(mesh, events, now) {
-  let n = 0;
-  for (const e of events) {
-    const d = display(e);
-    if (d[0] > now || n >= mesh.instanceMatrix.count) continue;
-    mesh.setMatrixAt(n++, matrix.makeTranslation(...toWorld(d[0], d[1], 0)));
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+  for (const y of [TRACK.rail, TRACK.rail + 5]) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  // Platform from −12 to 12 ls (its own frame), with station clocks every 2 ls.
+  const at = xs => X(fig, sr.toFrame(sr.lineMeetsNow(0, xs, 0, lab.w, T), lab.w)[1]);
+  ctx.fillStyle = C.oliveTint; ctx.fillRect(at(-12), TRACK.platform, at(12) - at(-12), 10);
+  ctx.strokeStyle = C.ink2; ctx.lineWidth = 1.2; ctx.strokeRect(at(-12), TRACK.platform, at(12) - at(-12), 10);
+  let every = 2;
+  while ((at(every) - at(0)) < 46 && every < 12) every += 2;
+  for (let xs = -10; xs <= 10; xs += 2) {
+    if (xs % every !== 0) continue;
+    const px = at(xs);
+    if (px < -20 || px > w + 20) continue;
+    const reading = lab.stationAt(xs);
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, TRACK.platform + 10); ctx.lineTo(px, TRACK.clocks - 9); ctx.stroke();
+    dial(ctx, px, TRACK.clocks, 8.5, reading, C.ink);
+    text(ctx, reading.toFixed(1), px, TRACK.clocks + 22, {mono: true, size: 10, align: 'center', color: C.ink2, weight: 700});
   }
-  mesh.count = n;
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.material.opacity = blend;
-  mesh.visible = blend > .02;
-}
-
-// ---------------------------------------------------------------- per-frame update
-const state = {now: 0, cx: 0, ex: 0};
-function update(now) {
-  const viewU = Math.tanh(phi);
-
-  // Earth: contracted along x when it moves; its spin and bead follow its own clock.
-  const e = sr.sliceAt(earthEvents, phi, now);
-  const earthTau = e ? sr.boost(e.slice(0, 3), -phi)[0] : 0;
-  const earthU = sr.relativeVelocity(0, viewU), ex = e ? e[1] : 0;
-  earth.group.position.set(ex, now * blend + EARTH_R, 0);
-  earth.group.scale.set(1 / sr.gamma(earthU), 1, 1);
-  earth.globe.rotation.y = earthTau * .6;
-  const beadAngle = -earthTau * Math.PI * 2;
-  earth.bead.position.set(Math.cos(beadAngle) * EARTH_R * 1.5, 0, Math.sin(beadAngle) * EARTH_R * 1.5);
-  earth.beadGlow.position.copy(earth.bead.position);
-
-  // Ship: its rest-frame shape, contracted along the motion, facing the way it travels.
-  const c = sr.sliceAt(centreEvents, phi, now);
-  const shipTau = c ? shipTauAt(c[3]) : 0;
-  const leg = trip.legAt(shipTau), u = sr.relativeVelocity(leg.u, viewU), cx = c ? c[1] : 0;
-  ship.group.position.set(cx, now * blend, 0);
-  ship.group.scale.set(1 / sr.gamma(u), 1, 1);
-  ship.hull.rotation.y = leg.u < 0 ? Math.PI : 0;
-
-  // Worldlines (Time view) and the path traced on the floor (Space view).
-  worldline.earth.set(flatWorld(pastOf(earthEvents, now), .01));
-  worldline.ship.set(flatWorld(pastOf(centreEvents, now), .01));
-  for (const w of [worldline.earth, worldline.ship]) w.material.opacity = .22 + .78 * blend;
-  worldline.earthFuture.set(flatWorld(futureOf(earthEvents, now, T_MAX)));
-  worldline.shipFuture.set(flatWorld(futureOf(centreEvents, now, T_MAX)));
-  for (const w of [worldline.earthFuture, worldline.shipFuture]) w.material.opacity = .32 * blend;
-  setTicks(ticks.earth, Array.from({length: 40}, (_, n) => [n + 1, 0, 0]), now);
-  setTicks(ticks.ship, Array.from({length: 40}, (_, n) => trip.centreAt(n + 1)), now);
-
-  // Light clock: the photon and its fading trail.
-  if (layers.clock) {
-    const p = sr.sliceAt(photonEvents, phi, now);
-    const pos = p ? toWorld(now, p[1], p[2], DECK + .08) : [cx, DECK, 0];
-    photon.core.position.set(...pos);
-    photon.glow.position.set(...pos);
-    const past = pastOf(photonEvents, now), colors = [], col = new THREE.Color(COLOR.photon);
-    for (const [t] of past) {
-      const k = Math.max(.3 + .7 * Math.exp(-(now - t) / 3), .7 * blend);
-      inkFade(col, k, inked);
-      colors.push(inked.r, inked.g, inked.b);
-    }
-    photon.trail.set(flatWorld(past, DECK + .08), colors);
-  }
-
-  // The flash from the ship's centre.
-  const fe = display(flash.emit), fb = display(flash.back), ff = display(flash.front);
-  if (layers.flash) {
-    const age = now - fe[0], lastHit = Math.max(fb[0], ff[0]);
-    if (age >= 0 && now <= lastHit + .9) {
-      const r = Math.min(age, lastHit - fe[0] + .9), ring = [];
-      for (let i = 0; i <= 120; i++) {
-        const a = i / 120 * Math.PI * 2;
-        ring.push(fe[1] + r * Math.cos(a), now * blend + DECK + .1, r * Math.sin(a));
+  // Tunnels (at rest on the platform). Doors are shut for 0.4 s of platform time around t = 0.
+  for (const tn of lab.tunnels) {
+    const a = at(tn.a), b = at(tn.b);
+    ctx.fillStyle = 'rgba(47,54,20,.08)'; ctx.fillRect(a, TRACK.roof - 4, b - a, TRACK.rail - TRACK.roof + 4);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(a, TRACK.rail); ctx.lineTo(a, TRACK.roof - 4); ctx.lineTo(b, TRACK.roof - 4); ctx.lineTo(b, TRACK.rail); ctx.stroke();
+    text(ctx, tn.name.toUpperCase(), a + 6, TRACK.roof + 9, {align: 'left', size: 9.5, weight: 800, color: C.ink2});
+    for (const [xs, px] of [[tn.a, a], [tn.b, b]]) {
+      const s = lab.stationAt(xs);
+      if (Math.abs(s) <= .2) {
+        ctx.fillStyle = C.spot; ctx.fillRect(px - 4, TRACK.roof - 4, 8, TRACK.rail - TRACK.roof + 4);
       }
-      flashView.ring.set(ring);
-      flashView.ring.material.opacity = Math.min(1, (lastHit + .9 - now) / .9);
-    } else flashView.ring.set([]);
-    const pop = (sprite, event, base) => {
-      const since = now - event[0];
-      sprite.visible = since >= 0;
-      sprite.position.set(...toWorld(event[0], event[1], 0, DECK + .1));
-      const k = Math.exp(-Math.max(since, 0) / .5);
-      sprite.scale.setScalar(base * (.6 + 1.6 * k) * (blend > .5 ? .7 : 1));
-      sprite.material.opacity = Math.max(blend > .5 ? .9 : .15, k);
-    };
-    pop(flashView.emit, fe, 1.2);
-    pop(flashView.back, fb, 1.4);
-    pop(flashView.front, ff, 1.4);
-    // Lamps ride on the ship's ends (Space view): dim until the light arrives, then lit.
-    for (const [lamp, events, hit] of [[lamps.back, backEvents, fb], [lamps.front, frontEvents, ff]]) {
-      const end = sr.sliceAt(events, phi, now), lit = now >= hit[0];
-      lamp.visible = !!end && blend < .5;
-      if (end) lamp.position.set(...toWorld(now, end[1], 0, DECK + .15));
-      lamp.material.color.set(lit ? INK.spot : INK.oliveTint);
-      lamp.material.opacity = lit ? 1 : .25;
-      lamp.scale.setScalar(lit ? 1.1 : .7);
     }
-    state.lit = {back: now >= fb[0], front: now >= ff[0]};
-    const rays = [];
-    for (const target of [flash.back, flash.front]) {
-      const past = pastOf([flash.emit, target], now);
-      if (past.length === 2) rays.push(...flatWorld(past, .03));
+  }
+  // Trains and ships.
+  for (const b of lab.bodies) drawBodyOnTrack(ctx, fig, b);
+  // Light: pulses moving out from each flash at c, in every frame.
+  for (const e of lab.events) {
+    const [te, xe] = sr.toFrame([e.t, e.x], lab.w);
+    if (Math.abs(T - te) < .18) {
+      const px = X(fig, xe);
+      ctx.strokeStyle = C.spot; ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(px + Math.cos(a) * 6, TRACK.floor - 10 + Math.sin(a) * 6); ctx.lineTo(px + Math.cos(a) * 12, TRACK.floor - 10 + Math.sin(a) * 12); ctx.stroke(); }
+      text(ctx, e.name, px, 30, {align: 'center', size: 11, weight: 800, color: C.spot, bg: 'rgba(244,238,224,.9)'});
     }
-    flashView.rays.set(rays);
-    flashView.rays.material.opacity = .85 * blend;
-  }
-
-  // "Now" sheets: Earth's (t = Earth's reading) and the ship's (its rest frame, through its centre).
-  if (layers.simultaneity) {
-    const extent = 32, w = 2.4;
-    const corners = eventAt => [[-extent, -w], [extent, -w], [extent, w], [-extent, w]]
-      .map(([x, y]) => { const d = display(eventAt(x, y)); return toWorld(d[0], d[1], y); });
-    setQuad(sheets.earth.mesh.geometry, corners((x, y) => [earthTau, x, y]));
-    setQuad(sheets.ship.mesh.geometry, corners((x, y) => sr.shipEvent(trip, shipTau, [0, x, y])));
-    const edge = eventAt => {
-      const a = display(eventAt(-extent)), b = display(eventAt(extent));
-      return [...toWorld(a[0], a[1], 0, .02), ...toWorld(b[0], b[1], 0, .02)];
-    };
-    sheets.earth.edge.set(edge(x => [earthTau, x, 0]));
-    sheets.ship.edge.set(edge(x => sr.shipEvent(trip, shipTau, [0, x])));
-    for (const s of Object.values(sheets)) {
-      s.mesh.material.opacity = .07 * blend;
-      s.edge.material.opacity = .9 * blend;
-      s.mesh.visible = blend > .02;
+    if (!e.light || T < te) continue;
+    for (const dir of [-1, 1]) {
+      const px = X(fig, xe + dir * (T - te));
+      if (px < -10 || px > w + 10) continue;
+      ctx.fillStyle = C.spot; ctx.beginPath(); ctx.arc(px, TRACK.floor - 10, 4.5, 0, 2 * Math.PI); ctx.fill();
+      arrowHead(ctx, px + dir * 9, TRACK.floor - 10, dir > 0 ? 0 : Math.PI, 5, C.spot);
     }
-    band.back.set(flatWorld(pastOf(backEvents, now), .01));
-    band.front.set(flatWorld(pastOf(frontEvents, now), .01));
-    // Earth's cut: where the two ends are at one Earth time. The ship's cut: one moment of ship time.
-    const earthCut = [sr.sliceAt(backEvents, 0, earthTau), sr.sliceAt(frontEvents, 0, earthTau)];
-    const shipCut = [sr.shipEvent(trip, shipTau, [0, -L0 / 2]), sr.shipEvent(trip, shipTau, [0, L0 / 2])];
-    const segment = (line, ends, key, lift) => {
-      if (!ends[0] || !ends[1]) { line.set([]); return; }
-      const a = display(ends[0].slice(0, 3)), b = display(ends[1].slice(0, 3));
-      line.set([...toWorld(a[0], a[1], 0, lift), ...toWorld(b[0], b[1], 0, lift)]);
-      cutLabelAt[key].set(...toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0, lift));
-    };
-    segment(band.cutEarth, earthCut, 'earth', .06);
-    segment(band.cutShip, shipCut, 'ship', .1);
-    state.cuts = {earth: earthCut[0] && earthCut[1] ? Math.abs(earthCut[1][1] - earthCut[0][1]) : null, ship: L0};
-    // The band and its cuts belong to the one-way cruise; the round trip has its own story.
-    for (const line of Object.values(band)) line.material.opacity = settings.roundTrip ? 0 : (line === band.back || line === band.front ? .55 : 1) * blend;
   }
-
-  // Tick 8 of each clock: both lie on the τ = 8 s curve, whatever the frame.
-  for (const [sprite, event] of [[eight.earth, [8, 0, 0]], [eight.ship, trip.centreAt(8)]]) {
-    const d = display(event);
-    sprite.visible = blend > .5 && d[0] <= now;
-    sprite.position.set(...toWorld(d[0], d[1], 0));
-    sprite.material.opacity = blend;
+  if (k < 6) text(ctx, 'zoomed out', w - 8, 14, {align: 'right', size: 9.5, color: C.ink4});
+}
+function drawBodyOnTrack(ctx, fig, b) {
+  const centre = lab.bodyNow(b);
+  if (!centre) return;
+  const riding = lab.ride === b.name || lab.ride.startsWith(`${b.name},`);
+  const u = sr.relativeVelocity(centre.leg.u, lab.w), dirS = Math.sign(centre.leg.u) || 1;
+  let back, front;
+  if (b.ship || b.legs.length > 1) {
+    const half = b.L0 / 2 / sr.gamma(u);
+    back = {xp: centre.xp - half * dirS}; front = {xp: centre.xp + half * dirS};
+  } else {
+    back = lab.bodyNow(b, -dirS * b.L0 / 2); front = lab.bodyNow(b, dirS * b.L0 / 2);
   }
+  const xb = X(fig, back.xp), xf = X(fig, front.xp), left = Math.min(xb, xf), right = Math.max(xb, xf);
+  const top = b.ship ? TRACK.floor - 24 : TRACK.roof, bottom = TRACK.floor;
+  // Body with a nose at the front.
+  const nose = Math.min(12, (right - left) * .25), fwd = xf > xb ? 1 : -1;
+  ctx.beginPath();
+  if (fwd > 0) { ctx.moveTo(left, top); ctx.lineTo(right - nose, top); ctx.quadraticCurveTo(right, top, right, top + (bottom - top) * .55); ctx.lineTo(right, bottom); ctx.lineTo(left, bottom); }
+  else { ctx.moveTo(right, top); ctx.lineTo(left + nose, top); ctx.quadraticCurveTo(left, top, left, top + (bottom - top) * .55); ctx.lineTo(left, bottom); ctx.lineTo(right, bottom); }
+  ctx.closePath();
+  ctx.fillStyle = riding ? b.color : C.paper2; ctx.fill();
+  ctx.strokeStyle = b.color; ctx.lineWidth = 2.4; ctx.stroke();
+  // Windows: evenly spaced along the train in its own frame, so they bunch up with it.
+  if (!b.ship && b.legs.length === 1 && right - left > 30) {
+    ctx.fillStyle = riding ? 'rgba(244,238,224,.75)' : 'rgba(86,97,42,.22)';
+    const n = Math.max(2, Math.round(b.L0));
+    for (let i = 0; i < n; i++) {
+      const xi = -b.L0 / 2 + (i + .5) * b.L0 / n, p = lab.bodyNow(b, xi);
+      const ww = (right - left) / n * .5;
+      ctx.fillRect(X(fig, p.xp) - ww / 2, top + 7, ww, 13);
+    }
+  }
+  // Light clock: a pulse bouncing between mirrors at the centre, with its recent path.
+  if (b.lightClock) {
+    const m0 = top + 27, m1 = bottom - 6, yOf = tau => { const ph = ((tau % 1) + 1) % 1; return m1 - (m1 - m0) * (ph < .5 ? ph * 2 : 2 - ph * 2); };
+    const cxp = X(fig, centre.xp);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+    for (const y of [m0 - 2, m1 + 2]) { ctx.beginPath(); ctx.moveTo(cxp - 9, y); ctx.lineTo(cxp + 9, y); ctx.stroke(); }
+    ctx.strokeStyle = C.spot; ctx.lineWidth = 1.6; ctx.beginPath();
+    let first = true;
+    for (let d = 1.6; d >= 0; d -= .02) {
+      const p = lab.bodyNow(b, 0, lab.T - d);
+      if (!p) continue;
+      const x = X(fig, p.xp), y = yOf(p.tau);
+      first ? ctx.moveTo(x, y) : ctx.lineTo(x, y); first = false;
+    }
+    ctx.stroke();
+    ctx.fillStyle = C.spot; ctx.beginPath(); ctx.arc(cxp, yOf(centre.tau), 4, 0, 2 * Math.PI); ctx.fill();
+  }
+  // Clocks: back, middle and front (they disagree when the train moves past you).
+  const clocks = b.ship || b.legs.length > 1 || right - left < 60 ? [[0, centre]] :
+    [[-1, lab.bodyNow(b, -b.L0 / 2 + .5)], [0, centre], [1, lab.bodyNow(b, b.L0 / 2 - .5)]];
+  for (const [, p] of clocks) {
+    const px = X(fig, p.xp);
+    dial(ctx, px, top - 15, 9, p.tau, b.color);
+    text(ctx, p.tau.toFixed(1), px + 12, top - 11, {mono: true, size: 10, weight: 700, color: C.ink2, bg: 'rgba(236,228,210,.85)'});
+  }
+  const name = riding ? `${b.name} · YOU` : `${b.name}  ${u >= 0 ? '→' : '←'} ${Math.abs(u).toFixed(2)} c`;
+  text(ctx, name, (left + right) / 2, top - 31, {align: 'center', size: 11, weight: 800, color: riding ? C.spot : C.ink, bg: 'rgba(236,228,210,.9)'});
+}
 
-  // Floor rides with "now" in Time view; time furniture fades in with Time view.
-  floor.position.y = now * blend;
-  for (const lines of floor.children) lines.material.opacity = lines.userData.opacity * (1 - .55 * blend);
-  for (const obj of group.time.children) if (obj.userData.opacity) obj.material.opacity = obj.userData.opacity * blend;
-  coneMaterial.uniforms.strength.value = blend;
-  for (const h of [nullLines, ...hyperbolae]) h.material.opacity = (h.material.userData.base ??= h.material.opacity) * blend;
+// ---------------------------------------------------------------- the spacetime diagram
+let hover = null, drag = null;
+function worldPath(ctx, fig, leg, xi, tFrom, tTo) {
+  // Straight in every frame: transform two S events on this point's worldline.
+  const g = sr.gamma(leg.u), x0 = leg.x0 + xi / g;
+  const a = sr.toFrame([tFrom, x0 + leg.u * (tFrom - leg.t0)], lab.w), b = sr.toFrame([tTo, x0 + leg.u * (tTo - leg.t0)], lab.w);
+  return [[X(fig, a[1]), Y(a[0])], [X(fig, b[1]), Y(b[0])]];
+}
+function legSpan(leg, i) { return [leg.forever && i === 0 ? -400 : leg.t0, Math.min(leg.tEnd, 400)]; }
+function drawDiag() {
+  const fig = figs.diag, ctx = begin(fig), {w, h} = fig, [tMin, tMax] = lab.route.range, k = scale();
+  ctx.save(); ctx.beginPath(); ctx.rect(PAD.l, DIAG.top, w - PAD.l - PAD.r, h - DIAG.top - DIAG.bottom); ctx.clip();
+  // Your grid.
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1;
+  for (let x = Math.floor(xOf(fig, 0)); x <= xOf(fig, w); x++) { ctx.beginPath(); ctx.moveTo(X(fig, x), 0); ctx.lineTo(X(fig, x), h); ctx.stroke(); }
+  for (let t = Math.ceil(tMin); t <= tMax; t++) { ctx.beginPath(); ctx.moveTo(0, Y(t)); ctx.lineTo(w, Y(t)); ctx.stroke(); }
+  // Invariant hyperbolae t² − x² = ±k²: unchanged by any change of frame.
+  if (lab.show.hyper) {
+    ctx.strokeStyle = 'rgba(86,97,42,.32)'; ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
+    for (let s = 3; s <= 30; s += 3) {
+      for (const [sx, st] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        ctx.beginPath();
+        for (let i = -40; i <= 40; i++) {
+          const eta = i / 10, a = s * Math.cosh(eta), b = s * Math.sinh(eta);
+          const [t, x] = sx === 1 ? [st * a, b] : [b, st * a];
+          i === -40 ? ctx.moveTo(X(fig, x), Y(t)) : ctx.lineTo(X(fig, x), Y(t));
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(200,84,31,.35)'; ctx.lineWidth = 1;
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(X(fig, -100 * d), Y(-100)); ctx.lineTo(X(fig, 100 * d), Y(100)); ctx.stroke(); }
+  }
+  // Platform axes, when you ride something else.
+  if (Math.abs(lab.w) > 1e-3) {
+    ctx.strokeStyle = C.ink3; ctx.lineWidth = 1.2;
+    const ta = sr.toFrame([-200, 0], lab.w), tb = sr.toFrame([200, 0], lab.w), xa = sr.toFrame([0, -200], lab.w), xb = sr.toFrame([0, 200], lab.w);
+    ctx.beginPath(); ctx.moveTo(X(fig, ta[1]), Y(ta[0])); ctx.lineTo(X(fig, tb[1]), Y(tb[0])); ctx.stroke();
+    ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(X(fig, xa[1]), Y(xa[0])); ctx.lineTo(X(fig, xb[1]), Y(xb[0])); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // Tunnels: bands between their two ends.
+  for (const tn of lab.tunnels) {
+    const p = [[-200, tn.a], [200, tn.a], [200, tn.b], [-200, tn.b]].map(e => sr.toFrame(e, lab.w)).map(([t, x]) => [X(fig, x), Y(t)]);
+    ctx.fillStyle = 'rgba(47,54,20,.1)'; ctx.beginPath(); p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.fill();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(...p[0]); ctx.lineTo(...p[1]); ctx.moveTo(...p[2]); ctx.lineTo(...p[3]); ctx.stroke();
+  }
+  // Trains: a band from back to front, the centre's worldline, and its clock's ticks.
+  for (const b of lab.bodies) {
+    b.legs.forEach((leg, i) => {
+      const [ta, tb] = legSpan(leg, i);
+      if (!b.ship && b.legs.length === 1) {
+        const d = Math.sign(leg.u) || 1, [p1, p2] = worldPath(ctx, fig, leg, -d * b.L0 / 2, ta, tb), [p3, p4] = worldPath(ctx, fig, leg, d * b.L0 / 2, ta, tb);
+        ctx.fillStyle = b.color; ctx.globalAlpha = .13;
+        ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2); ctx.lineTo(...p4); ctx.lineTo(...p3); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1; ctx.strokeStyle = b.color; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2); ctx.moveTo(...p3); ctx.lineTo(...p4); ctx.stroke();
+      }
+      const [c1, c2] = worldPath(ctx, fig, leg, 0, ta, tb);
+      ctx.strokeStyle = b.color; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.stroke();
+      // Ticks every second of the body's own time.
+      const g = sr.gamma(leg.u), tauA = leg.tau0 + (ta - leg.t0) / g, tauB = leg.tau0 + (tb - leg.t0) / g;
+      for (let tau = Math.ceil(Math.max(tauA, -60)); tau <= Math.min(tauB, 120); tau++) {
+        const t = leg.t0 + g * (tau - leg.tau0), [tp, xp] = sr.toFrame([t, leg.x0 + leg.u * (t - leg.t0)], lab.w);
+        if (tp < tMin - 1 || tp > tMax + 1) continue;
+        const big = tau % 5 === 0;
+        ctx.fillStyle = big ? b.color : C.paper2; ctx.strokeStyle = b.color; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.arc(X(fig, xp), Y(tp), big ? 3.4 : 2.4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+        if (big && k > 14) text(ctx, `${tau}`, X(fig, xp) + 6, Y(tp) + 4, {size: 9.5, mono: true, color: b.color, weight: 700});
+      }
+    });
+    // Speed handle above the present, on single-leg trains.
+    if (b.legs.length === 1 && !b.ship) {
+      const hnd = handleOf(b);
+      if (hnd) {
+        ctx.fillStyle = C.paper2; ctx.strokeStyle = b.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(hnd.px, hnd.py, 6.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+        arrowHead(ctx, hnd.px + 9, hnd.py, 0, 4, b.color); arrowHead(ctx, hnd.px - 9, hnd.py, Math.PI, 4, b.color);
+      }
+    }
+  }
+  // Light from flashes: forward light cones at 45°.
+  for (const e of lab.events) {
+    if (!e.light) continue;
+    const [te, xe] = sr.toFrame([e.t, e.x], lab.w);
+    for (const d of [-1, 1]) {
+      const span = Math.max(0, tMax + 2 - te);
+      ctx.strokeStyle = C.spot; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(X(fig, xe), Y(te)); ctx.lineTo(X(fig, xe + d * span), Y(te + span)); ctx.stroke();
+      const tA = Math.min(lab.T, tMax) - te;
+      if (tA > .6) arrowHead(ctx, X(fig, xe + d * tA), Y(te + tA), Math.atan2(-1, d), 6, C.spot);
+    }
+  }
+  // Other frames' "now": the lines each train calls simultaneous, through where it is now.
+  if (lab.show.nows) {
+    const lines = [];
+    if (Math.abs(lab.w) > 1e-3) lines.push({name: 'Platform', color: C.ink2, u: lab.relV(0), at: [lab.T, lab.cx]});
+    for (const b of lab.bodies) {
+      const now = lab.bodyNow(b);
+      if (!now) continue;
+      const u = sr.relativeVelocity(now.leg.u, lab.w);
+      if (Math.abs(u) > 1e-3) lines.push({name: b.name, color: b.color, u, at: [now.tp, now.xp]});
+    }
+    for (const l of lines) {
+      const [t0, x0] = l.at, span = 60;
+      ctx.strokeStyle = l.color; ctx.lineWidth = 1.3; ctx.setLineDash([7, 5]);
+      ctx.beginPath(); ctx.moveTo(X(fig, x0 - span), Y(t0 - l.u * span)); ctx.lineTo(X(fig, x0 + span), Y(t0 + l.u * span)); ctx.stroke(); ctx.setLineDash([]);
+      const lx = Math.min(xOf(fig, w - 70), x0 + 4.5);
+      text(ctx, `${l.name}’s now`, X(fig, lx), Y(t0 + l.u * (lx - x0)) - 5, {size: 10, weight: 700, color: l.color, bg: 'rgba(236,228,210,.85)'});
+    }
+  }
+  // Your now.
+  ctx.strokeStyle = C.spot; ctx.lineWidth = 2; ctx.setLineDash([9, 5]);
+  ctx.beginPath(); ctx.moveTo(0, Y(lab.T)); ctx.lineTo(w, Y(lab.T)); ctx.stroke(); ctx.setLineDash([]);
+  text(ctx, 'NOW', w - PAD.r - 4, Y(lab.T) - 5, {align: 'right', size: 10.5, weight: 800, color: C.spot, bg: 'rgba(236,228,210,.85)'});
+  // Events.
+  for (const e of lab.events) {
+    const [te, xe] = sr.toFrame([e.t, e.x], lab.w), px = X(fig, xe), py = Y(te), sel = lab.select.includes(e.name);
+    if (sel) { ctx.strokeStyle = C.spot; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, py, 9, 0, 2 * Math.PI); ctx.stroke(); }
+    ctx.fillStyle = e.light ? C.spot : C.ink; ctx.beginPath(); ctx.arc(px, py, 5, 0, 2 * Math.PI); ctx.fill();
+    text(ctx, e.name, px + 11, py + 4, {size: 11, weight: 800, bg: 'rgba(236,228,210,.85)'});
+  }
+  // Body labels at the top of the diagram.
+  for (const b of lab.bodies) {
+    const p = lab.bodyNow(b, 0, tMax - .6);
+    if (p) text(ctx, b.name, X(fig, p.xp) + 6, DIAG.top + 14, {size: 11.5, weight: 800, color: b.color, bg: 'rgba(236,228,210,.85)'});
+  }
+  if (hover?.tip && hover.px != null) { ctx.strokeStyle = C.spot; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(hover.px, hover.py, 11, 0, 2 * Math.PI); ctx.stroke(); }
+  ctx.restore();
+  // Axes.
+  for (let t = Math.ceil(tMin / 2) * 2; t <= tMax; t += 2) text(ctx, `${t}`, PAD.l - 6, Y(t) + 4, {align: 'right', size: 9.5, mono: true, color: C.ink3, weight: 400});
+  for (let x = Math.ceil(xOf(fig, PAD.l) / 2) * 2; x <= xOf(fig, w - PAD.r); x += 2) text(ctx, `${x}`, X(fig, x), h - 10, {align: 'center', size: 9.5, mono: true, color: C.ink3, weight: 400});
+  text(ctx, 't (s) ↑', 4, DIAG.top + 2, {size: 9.5, color: C.ink3, weight: 700});
+  text(ctx, 'x (ls) →', w - PAD.r, h - 10, {align: 'right', size: 9.5, color: C.ink3, weight: 700, bg: C.paper});
+}
+function handleOf(b) {
+  const now = lab.bodyNow(b);
+  if (!now) return null;
+  const dt = 3, p = lab.bodyNow(b, 0, lab.T + dt);
+  return p && {px: X(figs.diag, p.xp), py: Y(lab.T + dt), pivot: now};
+}
 
-  Object.assign(state, {
-    now, earthTau, shipTau, u, earthU, fe, fb, ff, ex, cx,
-    home: settings.roundTrip && shipTau >= trip.legs[2].tau0,
+function draw() { if (lab.route && figs.track.dpr && figs.diag.dpr) { drawTrack(); drawDiag(); } }
+
+// ---------------------------------------------------------------- side column
+function flaps(el, s, n) {
+  const str = s.toUpperCase().padEnd(n).slice(0, n);
+  el.innerHTML = [...str].map(c => `<span class="${c === ' ' ? 'blank' : ''}">${c === ' ' ? '&nbsp;' : c}</span>`).join('');
+  el.setAttribute('aria-label', s);
+}
+function renderRoute() {
+  const r = lab.route;
+  $('routes').innerHTML = routes.map((x, i) => `<button class="route${x === r ? ' on' : ''}" data-id="${x.id}"><i>${String(i + 1).padStart(2, '0')}</i>${x.label}</button>`).join('');
+  $('ticket').innerHTML = `<h1>${r.title}</h1>${r.text}<div class="formula">${r.formula}<small>${r.note}</small></div>
+    <p class="label">Try</p><ul class="try">${r.tries.map(t => `<li>${t}</li>`).join('')}</ul>`;
+  renderRide();
+}
+function renderRide() {
+  const ride = $('ride');
+  ride.innerHTML = '<span>Ride with</span>' + lab.frames().map(fr =>
+    `<button class="btn${fr.name === lab.ride ? ' on' : ''}" data-frame="${fr.name}"><i style="--c:${fr.body?.color ?? C.ink4}"></i>${fr.name}</button>`).join('') +
+    `<label class="lever">Any speed <input id="lever" type="range" min="-0.95" max="0.95" step="0.01" value="${lab.wTarget}" aria-label="Your speed relative to the platform"><output id="out-lever">${f2(lab.wTarget)} c</output></label>`;
+  $('lever').oninput = event => { setFrame(+event.target.value, 'Custom', false); };
+}
+function renderBoard() {
+  flaps($('flap-frame'), lab.ride, 16);
+  flaps($('flap-time'), `${lab.T < 0 ? '-' : ' '}${Math.abs(lab.T).toFixed(2).padStart(5, '0')}`, 6);
+  $('scrub').value = lab.T;
+  $('out-lever') && ($('out-lever').textContent = `${f2(lab.w)} c`);
+  const rows = lab.events.map(e => {
+    const [t, x] = sr.toFrame([e.t, e.x], lab.w);
+    return `<tr class="${lab.select.includes(e.name) ? 'sel' : ''}" data-name="${e.name}"><td>${e.name}</td><td>${f2(t)}</td><td>${f2(x)}</td></tr>`;
   });
+  $('events').innerHTML = rows.join('') || '<tr><td colspan="3">No events yet: use + Flash or + Event.</td></tr>';
+  const [a, b] = lab.select.map(n => lab.eventIn(n));
+  if (a && b) {
+    const dt = b[0] - a[0], dx = b[1] - a[1], s2 = dt * dt - dx * dx;
+    const kind = Math.abs(s2) < 1e-3 ? 'Light-like: one light ray joins them, in every frame.' :
+      s2 > 0 ? `Time-like: a traveller at ${f2(dx / dt)} c relative to you is at both; for it they happen at the same place, ${Math.sqrt(s2).toFixed(2)} s apart.` :
+      (Math.abs(dt) < .005 ? `Space-like: you see them at the same moment, ${Math.sqrt(-s2).toFixed(2)} ls apart. No signal can link them.` : `Space-like: a frame moving at ${f2(dt / dx)} c relative to you sees them at the same moment, ${Math.sqrt(-s2).toFixed(2)} ls apart. No signal can link them.`);
+    $('pair').innerHTML = `${lab.select[0]} → ${lab.select[1]}: Δt <b>${f2(dt)}</b> s, Δx <b>${f2(dx)}</b> ls, s² = Δt² − Δx² = <b>${f2(s2)}</b> in every frame. ${kind}`;
+  } else $('pair').textContent = '';
+  $('insight').innerHTML = lab.route.insight(lab);
 }
 
-// ---------------------------------------------------------------- readout, markers and labels
-const fmt = x => x.toFixed(2);
-function updateReadout() {
-  const {earthTau, shipTau, u, earthU, now} = state;
-  $('earth-tau').textContent = `${fmt(earthTau)} s`;
-  $('ship-tau').textContent = `${fmt(shipTau)} s`;
-  $('earth-where').textContent = Math.abs(earthU) < 1e-4 ? 'at rest in this frame' : `moving at ${fmt(Math.abs(earthU))} c · ticks ${fmt(sr.gamma(earthU))}× slower`;
-  $('ship-where').textContent = Math.abs(u) < 1e-4 ? 'at rest in this frame' : `moving at ${fmt(Math.abs(u))} c · ticks ${fmt(sr.gamma(u))}× slower`;
-  const lag = earthTau - shipTau;
-  const lagText = who => `${fmt(Math.abs(lag))} s behind ${who}, in this frame`;
-  $('earth-sub').textContent = lag < -.005 ? lagText('the ship’s clock') : '';
-  $('earth-sub').hidden = !(lag < -.005);
-  $('ship-sub').innerHTML = state.home
-    ? `home again: the trip took ${trip.legs[2].tau0.toFixed(1)} s of ship time and ${(2 * TURN_AT).toFixed(1)} s of Earth time`
-    : `${lag > .005 ? `${lagText('Earth’s clock')}<br>` : ''}length here ${fmt(sr.contractedLength(L0, u))} ls (${L0.toFixed(2)} at rest)`;
-  // Bars: time each clock has lived, as a share of this frame's time.
-  const share = tau => now > .01 ? Math.min(1, tau / now) : 1;
-  $('bar-earth').style.width = `${share(earthTau) * 100}%`;
-  $('bar-ship').style.width = `${share(shipTau) * 100}%`;
-  $('row-flash').hidden = !layers.flash;
-  if (layers.flash) {
-    const gap = state.ff[0] - state.fb[0];
-    $('flash-gap').textContent = Math.abs(gap) < .005 ? 'both ends together' : gap > 0 ? `back first, by ${fmt(gap)} s` : `front first, by ${fmt(-gap)} s`;
-    const lit = t => now >= t ? 'lit' : 'not yet';
-    $('flash-sub').textContent = `back at ${fmt(state.fb[0])} s (${lit(state.fb[0])}) · front at ${fmt(state.ff[0])} s (${lit(state.ff[0])})`;
-  }
-  const marks = [];
-  if (layers.flash) {
-    marks.push({t: state.fe[0], label: 'flash', color: '#2f3614'});
-    marks.push({t: state.fb[0], label: Math.abs(state.ff[0] - state.fb[0]) > .4 ? 'back lit' : 'both lit', color: '#c8541f'});
-    if (Math.abs(state.ff[0] - state.fb[0]) > .4) marks.push({t: state.ff[0], label: 'front lit', color: '#c8541f'});
-  }
-  if (settings.roundTrip) {
-    marks.push({t: display(trip.centreAt(trip.legs[1].tau0))[0], label: 'turn', color: '#56612a'});
-    marks.push({t: display(trip.centreAt(trip.legs[2].tau0))[0], label: 'home', color: '#c8541f'});
-  }
-  transport.setMarkers(marks);
+// ---------------------------------------------------------------- frames and routes
+let tween = null;
+function setFrame(w, name, animate = true) {
+  lab.ride = name; lab.wTarget = w; lab.follow = null;
+  const fr = lab.frames().find(x => x.name === name);
+  let cx = 0;
+  if (fr?.body) {
+    const p = sr.bodyAtNow(fr.body.legs, w, lab.T);
+    cx = p ? p.xp : 0;
+    lab.follow = fr.body;
+  } else if (name === 'Custom') cx = lab.cx;
+  if (!animate) { lab.w = w; lab.cx = cx; tween = null; }
+  else tween = {from: sr.rapidity(lab.w), to: sr.rapidity(w), cx0: lab.cx, cx1: cx, t0: performance.now()};
+  for (const b of document.querySelectorAll('[data-frame]')) b.classList.toggle('on', b.dataset.frame === name);
+  if (name !== 'Custom' && $('lever')) $('lever').value = w;
+}
+function loadRoute(r) {
+  lab.route = r; lab.clear(); lab.T = r.range[0]; lab.w = lab.wTarget = 0; lab.ride = 'Platform'; lab.cx = 0; lab.follow = null; tween = null;
+  r.setup(lab);
+  if (!lab.select.length) lab.select = lab.events.slice(0, 2).map(e => e.name);
+  $('scrub').min = r.range[0]; $('scrub').max = r.range[1];
+  setPlaying(true);
+  renderRoute(); renderBoard(); draw();
 }
 
-const labelPoint = new THREE.Vector3();
-const pool = {};
-function poolLabel(kind, i) {
-  pool[kind] ??= [];
-  let el = pool[kind][i];
-  if (!el) {
-    el = document.createElement('div');
-    el.className = `scene-label ${kind}`;
-    el.innerHTML = '<div class="tag"><span class="name"></span></div>';
-    $('dynamic-labels').append(el);
-    pool[kind][i] = el;
-  }
-  return el;
+// ---------------------------------------------------------------- interaction
+function setTool(tool) {
+  lab.tool = tool;
+  for (const b of document.querySelectorAll('[data-tool]')) { b.classList.toggle('on', b.dataset.tool === tool); b.setAttribute('aria-pressed', String(b.dataset.tool === tool)); }
+  $('tool-hint').textContent = HINTS[tool];
+  $('speed-row').hidden = tool !== 'train';
+  figs.diag.canvas.classList.toggle('move', tool === 'move');
 }
-function hidePool(kind, from) { for (const el of (pool[kind] ?? []).slice(from)) el.style.visibility = 'hidden'; }
+const local = (event, canvas) => { const r = canvas.getBoundingClientRect(); return [event.clientX - r.left, event.clientY - r.top]; };
+function showTip(event, html) {
+  const tip = $('tip');
+  if (!html) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = html; tip.classList.add('visible');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.transform = `translate(${Math.min(innerWidth - w - 10, event.clientX + 16)}px, ${Math.max(10, Math.min(innerHeight - h - 10, event.clientY - h - 12))}px)`;
+}
+function nextName(prefix) {
+  if (prefix === 'train') { for (const n of 'ABCDEFGHJKLMN') if (!lab.find(n)) return n; return '?'; }
+  let i = 1; while (lab.events.some(e => e.name === `${prefix} ${i}`)) i++;
+  return `${prefix} ${i}`;
+}
+function hitDiag(sx, sy) {
+  const fig = figs.diag;
+  for (const e of lab.events) { const [t, x] = sr.toFrame([e.t, e.x], lab.w); if (Math.hypot(X(fig, x) - sx, Y(t) - sy) < 11) return {kind: 'event', e, px: X(fig, x), py: Y(t)}; }
+  for (const b of lab.bodies) if (b.legs.length === 1 && !b.ship) { const h = handleOf(b); if (h && Math.hypot(h.px - sx, h.py - sy) < 12) return {kind: 'handle', b, ...h}; }
+  const t = tOf(sy), x = xOf(fig, sx);
+  for (const b of lab.bodies) {
+    const p = lab.bodyNow(b, 0, t);
+    if (p && Math.abs(X(fig, p.xp) - sx) < 8) return {kind: 'body', b, p, px: X(fig, p.xp), py: sy};
+  }
+  return {kind: 'space', t, x};
+}
+const diag = figs.diag.canvas;
+diag.addEventListener('pointerdown', event => {
+  const [sx, sy] = local(event, diag), hit = hitDiag(sx, sy), fig = figs.diag;
+  const [tS, xS] = sr.fromFrame([tOf(sy), xOf(fig, sx)], lab.w);
+  diag.setPointerCapture(event.pointerId);
+  if (lab.tool === 'move') {
+    if (hit.kind === 'event') drag = {kind: 'event', e: hit.e};
+    else if (hit.kind === 'handle') drag = {kind: 'handle', b: hit.b, pivot: hit.pivot};
+    else { drag = {kind: 'pan', sx, cx: lab.cx}; lab.follow = null; }
+  } else if (lab.tool === 'train') {
+    const u = sr.addVelocities(lab.newV, lab.w), name = nextName('train');
+    lab.addTrain({name, L0: 4, legs: [{t0: tS, x0: xS, u, tau0: 0, forever: true, label: name}]});
+    renderRide();
+  } else if (lab.tool === 'flash' || lab.tool === 'mark') {
+    const name = nextName(lab.tool === 'flash' ? 'Flash' : 'Event');
+    lab.addEvent({name, t: tS, x: xS, light: lab.tool === 'flash'});
+    lab.select = [...lab.select, name].slice(-2);
+  }
+  renderBoard(); draw();
+});
+diag.addEventListener('pointermove', event => {
+  const [sx, sy] = local(event, diag), fig = figs.diag;
+  if (drag?.kind === 'event') {
+    [drag.e.t, drag.e.x] = sr.fromFrame([tOf(sy), xOf(fig, sx)], lab.w); renderBoard(); draw(); return;
+  }
+  if (drag?.kind === 'handle') {
+    const piv = drag.pivot, dtp = Math.max(.5, tOf(sy) - piv.tp);
+    const up = Math.max(-.95, Math.min(.95, (xOf(fig, sx) - piv.xp) / dtp)), u = sr.addVelocities(up, lab.w);
+    drag.b.legs = sr.chainLegs([{t0: piv.t, x0: piv.x, u, tau0: piv.tau, forever: true, label: drag.b.name}]);
+    renderRide(); setFrame(lab.wTarget, lab.ride, false);
+    showTip(event, `<b>${drag.b.name}</b>${f2(up)} c in your frame · ${f2(u)} c on the platform`); draw(); return;
+  }
+  if (drag?.kind === 'pan') { lab.cx = drag.cx - (sx - drag.sx) / scale(); draw(); return; }
+  const hit = hitDiag(sx, sy);
+  hover = null;
+  if (hit.kind === 'event') {
+    const [t, x] = sr.toFrame([hit.e.t, hit.e.x], lab.w);
+    hover = {tip: true, px: hit.px, py: hit.py};
+    showTip(event, `<b>${hit.e.name}</b>your frame: t = ${f2(t)} s, x = ${f2(x)} ls<br>platform: t = ${f2(hit.e.t)} s, x = ${f2(hit.e.x)} ls`);
+  } else if (hit.kind === 'handle') showTip(event, `<b>${hit.b.name}: speed handle</b>Drag sideways to change its speed. Its clocks carry on from now.`);
+  else if (hit.kind === 'body') showTip(event, `<b>${hit.b.name}</b>its own clock reads ${hit.p.tau.toFixed(2)} s here<br>moving at ${f2(sr.relativeVelocity(hit.p.leg.u, lab.w))} c in your frame`);
+  else {
+    const s2 = hit.t * hit.t - hit.x * hit.x;
+    showTip(event, `<b>t = ${f2(hit.t)} s, x = ${f2(hit.x)} ls</b>${Math.abs(s2) < .3 ? 'On the light cone of the origin.' : s2 > 0 ? `${hit.t > 0 ? 'In the future' : 'In the past'} of the origin: s² = ${f2(s2)} in every frame.` : `Elsewhere: no signal from the origin can reach here. s² = ${f2(s2)}.`}`);
+  }
+  if (!lab.playing) draw();
+});
+const endDrag = () => { drag = null; };
+diag.addEventListener('pointerup', endDrag);
+diag.addEventListener('pointercancel', endDrag);
+diag.addEventListener('pointerleave', () => { hover = null; showTip(null); });
 
-function updateLabels() {
-  const rects = [$('story'), $('panel'), $('readout'), $('transport')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
-  const pin = (el, x, y, z, show = true) => positionLabel(el, labelPoint.set(x, y, z), camera, {show, avoid: rects});
-  const cutsOn = layers.simultaneity && blend > .6 && state.cuts && !settings.roundTrip;
-  // On phones the cut labels need the room, so the name labels step aside while they show.
-  const names = !(cutsOn && narrow());
-  pin($('label-earth'), state.ex + EARTH_R, state.now * blend + EARTH_R * 2.2, 0, names);
-  // When Earth and ship meet (the end of a round trip), drop the ship's label below Earth's.
-  const together = Math.abs(state.ex - state.cx) < 1.5;
-  pin($('label-ship'), state.cx, state.now * blend + (together ? -.9 : DECK + .5), .55, names);
-  $('label-cut-earth-text').textContent = state.cuts?.earth ? `Earth’s cut ${fmt(state.cuts.earth)} ls` : '';
-  $('label-cut-ship-text').textContent = `Ship’s cut ${fmt(L0)} ls`;
-  // Earth's cut is labelled below its segment, the ship's above, so the two never collide.
-  positionLabel($('label-cut-earth'), labelPoint.copy(cutLabelAt.earth).setY(cutLabelAt.earth.y - 1.1), camera, {show: cutsOn && !!state.cuts?.earth, avoid: rects});
-  positionLabel($('label-cut-ship'), labelPoint.copy(cutLabelAt.ship).setY(cutLabelAt.ship.y + 1.5), camera, {show: cutsOn, avoid: rects});
-  const lampsOn = layers.flash && blend < .5 && state.lit;
-  $('label-back-text').textContent = state.lit?.back ? 'Back · lit' : 'Back · not yet';
-  $('label-front-text').textContent = state.lit?.front ? 'Front · lit' : 'Front · not yet';
-  positionLabel($('label-back'), labelPoint.copy(lamps.back.position).setY(lamps.back.position.y + .7), camera, {show: lampsOn, avoid: rects});
-  positionLabel($('label-front'), labelPoint.copy(lamps.front.position).setY(lamps.front.position.y + .7), camera, {show: lampsOn, avoid: rects});
-  pin($('label-cone'), -10, 10, 0, layers.invariants && blend > .6);
-
-  // Time view: tick numbers every 4 s, times on the axis, and the invariant curves.
-  let n = 0;
-  const showTicks = blend > .6;
-  for (const [kind, events] of [['earth', i => [i, 0, 0]], ['ship', i => trip.centreAt(i)]]) {
-    for (let i = 4; i <= 24; i += 4) {
-      const d = display(events(i));
-      if (!showTicks || d[0] > state.now) continue;
-      const el = poolLabel('tick', n++), name = el.querySelector('.name');
-      name.textContent = `${i} s`;
-      name.style.color = kind === 'earth' ? '#c8541f' : '#56612a';
-      pin(el, ...toWorld(d[0], d[1], 0));
+const track = figs.track.canvas;
+track.addEventListener('pointermove', event => {
+  const [sx, sy] = local(event, track), fig = figs.track;
+  if (sy > TRACK.clocks - 14) {
+    const xs = Math.round(sr.fromFrame([lab.T, xOf(fig, sx)], lab.w)[1] / 2) * 2;
+    if (Math.abs(xs) <= 10) return showTip(event, `<b>Platform clock at x = ${xs} ls</b>reads ${lab.stationAt(xs).toFixed(2)} s at this moment of your frame.${Math.abs(lab.w) > 1e-3 ? ' The platform clocks are synchronised for the platform, so to you they are out of step.' : ''}`);
+  }
+  for (const b of lab.bodies) {
+    const p = lab.bodyNow(b, 0);
+    if (!p) continue;
+    const half = b.L0 / 2 / sr.gamma(sr.relativeVelocity(p.leg.u, lab.w)) * scale() + 8;
+    if (Math.abs(X(fig, p.xp) - sx) < half && sy > TRACK.roof - 30 && sy < TRACK.floor + 4) {
+      const u = sr.relativeVelocity(p.leg.u, lab.w);
+      return showTip(event, `<b>${b.name}</b>${b.L0} ls long in its own frame, ${(b.L0 / sr.gamma(u)).toFixed(2)} ls in yours<br>moving at ${f2(u)} c; its clocks run at ${(1 / sr.gamma(u)).toFixed(3)} of yours`);
     }
   }
-  hidePool('tick', n);
-  // The time axis sits just left of the leftmost worldline, clear of the tour card.
-  const axisX = Math.min(state.ex, state.cx) - (narrow() ? 3 : 4.5);
-  for (let i = 0; i < 5; i++) {
-    const el = poolLabel('axis', i);
-    el.querySelector('.name').textContent = `${(i + 1) * 5} s`;
-    pin(el, axisX, (i + 1) * 5, -3, blend > .6);
-  }
-  // Curve labels on the left branch, away from the clocks' own tick labels.
-  [4, 8, 12, 16, 20].forEach((s, i) => {
-    // On the right branch, between the ship's worldline and the light cone.
-    const el = poolLabel('curve', i), xl = s * 1.1;
-    el.querySelector('.name').textContent = s === 8 ? 'τ = 8 s: tick 8 of both clocks' : `τ = ${s} s`;
-    pin(el, xl, Math.hypot(s, xl), 0, layers.invariants && blend > .6 && s % 8 === 0);
-  });
-}
-
-// ---------------------------------------------------------------- event inspector (Time view)
-const projected = new THREE.Vector3();
-function pick(clientX, clientY) {
-  if (blend < .6) return null;
-  let best = null, bestD = narrow() ? 22 : 16;
-  for (const k of candidates) {
-    if (k.layer && !layers[k.layer]) continue;
-    const d = display(k.e);
-    if (d[0] > state.now) continue;
-    projected.set(...toWorld(d[0], d[1], 0)).project(camera);
-    if (projected.z > 1) continue;
-    const sx = (projected.x * .5 + .5) * innerWidth, sy = (-projected.y * .5 + .5) * innerHeight;
-    const dist = Math.hypot(sx - clientX, sy - clientY);
-    if (dist < bestD) { bestD = dist; best = {...k, d}; }
-  }
-  return best;
-}
-function describe(k) {
-  const [t, x] = k.e, [ts, xs] = shipFrame(k.e), s2 = sr.interval(k.e);
-  const note = k.light ? 'Reached by the flash: on the flash’s light cone.'
-    : s2 > 1e-9 ? `Time from launch along a straight path: √(t² − x²) = ${fmt(Math.sqrt(s2))} s, in every frame.`
-      : 'On the light cone of the launch.';
-  return `<h4>${k.title}</h4>
-    <div class="row"><span>Earth frame</span><span>t = ${fmt(t)} s · x = ${fmt(x)} ls</span></div>
-    <div class="row"><span>Ship frame${settings.roundTrip ? ' (out)' : ''}</span><span>t′ = ${fmt(ts)} s · x′ = ${fmt(xs)} ls</span></div>
-    <div class="note">${note}</div>`;
-}
-function inspect(x, y) {
-  const k = pick(x, y);
-  $('scene').classList.toggle('pointing', !!k);
-  showTip(x, y, k && describe(k));
-  hover.material.opacity = k ? .9 : 0;
-  if (k) hover.position.set(...toWorld(k.d[0], k.d[1], 0));
-}
-let downAt = null;
-$('scene').addEventListener('pointermove', event => { if (event.pointerType === 'mouse' && !event.buttons) inspect(event.clientX, event.clientY); });
-$('scene').addEventListener('pointerdown', event => { downAt = [event.clientX, event.clientY]; });
-$('scene').addEventListener('pointerup', event => {
-  if (downAt && Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) < 6) inspect(event.clientX, event.clientY);
+  showTip(null);
 });
-$('scene').addEventListener('pointerleave', () => { showTip(0, 0, null); hover.material.opacity = 0; });
+track.addEventListener('pointerleave', () => showTip(null));
 
-// ---------------------------------------------------------------- camera
-// The camera orbits an anchor that follows the action; each framing sets the offset.
-const FRAMING = {
-  follow: () => narrow() ? [-1, 10, 11] : [-1.6, 5.4, 7.2],
-  overview: () => narrow() ? [0, 30, 21] : [0, 15, 11.5],
-  time: () => narrow() ? [-7, 6, 70] : [-10, 5, 47],
+$('events').addEventListener('click', event => {
+  const row = event.target.closest('[data-name]');
+  if (!row) return;
+  const n = row.dataset.name;
+  lab.select = lab.select.includes(n) ? lab.select.filter(x => x !== n) : [...lab.select, n].slice(-2);
+  renderBoard(); draw();
+});
+$('ride').addEventListener('click', event => {
+  const b = event.target.closest('[data-frame]');
+  if (!b) return;
+  const fr = lab.frames().find(x => x.name === b.dataset.frame);
+  setFrame(fr.w, fr.name);
+});
+$('routes').addEventListener('click', event => { const b = event.target.closest('[data-id]'); if (b) loadRoute(routes.find(r => r.id === b.dataset.id)); });
+$('tools').addEventListener('click', event => { const b = event.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
+$('new-v').oninput = event => { lab.newV = +event.target.value; $('out-v').textContent = `${f2(lab.newV)} c`; };
+$('scrub').oninput = event => { lab.T = +event.target.value; setPlaying(false); renderBoard(); draw(); };
+$('restart').onclick = () => loadRoute(lab.route);
+$('clear').onclick = () => { lab.clear(); setFrame(0, 'Platform', false); renderRide(); renderBoard(); draw(); };
+$('t-nows').onclick = event => { lab.show.nows = !lab.show.nows; event.currentTarget.setAttribute('aria-pressed', lab.show.nows); draw(); };
+$('t-hyper').onclick = event => { lab.show.hyper = !lab.show.hyper; event.currentTarget.setAttribute('aria-pressed', lab.show.hyper); draw(); };
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => {
+  lab.speed = +b.dataset.speed;
+  for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b);
 };
-let framing = 'overview', offsetTween = null;
-const anchor = new THREE.Vector3(), anchorGoal = new THREE.Vector3(), offset = new THREE.Vector3();
-function computeAnchorGoal() {
-  if (framing === 'follow' && targetBlend < .5) return anchorGoal.set(state.cx, state.now * blend, 0);
-  const mid = T_MAX / 2, a = sr.sliceAt(earthEvents, phi, mid), b = sr.sliceAt(centreEvents, phi, mid);
-  return anchorGoal.set(((a?.[1] ?? 0) + (b?.[1] ?? 0)) / 2, blend * (mid - 1), 0);
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
+function setPlaying(on) {
+  if (on && lab.route && lab.T >= lab.route.range[1] - 1e-6) lab.T = lab.route.range[0];
+  lab.playing = on; $('play').innerHTML = on ? ICON_PAUSE : ICON_PLAY; $('play').setAttribute('aria-label', on ? 'Pause' : 'Play');
 }
-function setFraming(name, animate = true) {
-  framing = name;
-  const to = new THREE.Vector3(...FRAMING[name]());
-  if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
-  else { offset.copy(to); offsetTween = null; }
-}
-controls.addEventListener('start', () => { offsetTween = null; });
-
-// ---------------------------------------------------------------- controls
-function applyLayers(next) {
-  if (next) for (const key of Object.keys(layers)) layers[key] = !!next[key];
-  for (const [key, on] of Object.entries(layers)) group[key].visible = on;
-  for (const chip of document.querySelectorAll('.chip')) setPressed(chip, layers[chip.dataset.layer]);
-}
-
-function setView(isTime, announce = false) {
-  targetBlend = isTime ? 1 : 0;
-  if (reducedMotion) blend = targetBlend;
-  setPressed($('view-space'), !isTime);
-  setPressed($('view-time'), isTime);
-  $('view-note').textContent = isTime ? 'Time view · tap a tick to inspect it' : 'Space view · where everything is, now';
-  if (announce) {
-    toast(isTime ? 'Time runs upward. Light travels at 45°.' : 'Positions at this moment, in the chosen frame.');
-    setFraming(isTime ? 'time' : spaceFraming);
+$('play').onclick = () => setPlaying(!lab.playing);
+const notes = $('notes');
+$('about').onclick = () => notes.showModal();
+notes.querySelector('.close').onclick = () => notes.close();
+notes.addEventListener('click', event => { if (event.target === notes) notes.close(); });
+addEventListener('keydown', event => {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, dialog[open]')) return;
+  if (event.key === ' ') { event.preventDefault(); setPlaying(!lab.playing); }
+  else if (event.key === 'r' || event.key === 'R') loadRoute(lab.route);
+  else if (/^[1-7]$/.test(event.key)) loadRoute(routes[+event.key - 1]);
+  else if (event.key === 'f' || event.key === 'F') {
+    const list = lab.frames(), i = list.findIndex(x => x.name === lab.ride), fr = list[(i + 1) % list.length];
+    setFrame(fr.w, fr.name);
   }
-}
-
-function setFrame(name, announce = false) {
-  frameName = name;
-  const w = sr.rapidity(settings.v);
-  targetPhi = name === 'ship' ? w : name === 'return' ? -w : 0;
-  if (reducedMotion) phi = targetPhi;
-  for (const id of ['earth', 'ship', 'return']) setPressed($('frame-' + id), id === name);
-  if (announce) toast(name === 'earth' ? 'Seen from Earth.' : name === 'ship' ? 'Seen from the ship: now Earth is the one moving.' : 'Seen from the ship on its way home.');
-}
-const cycleFrame = () => {
-  const order = settings.roundTrip ? ['earth', 'ship', 'return'] : ['earth', 'ship'];
-  setFrame(order[(order.indexOf(frameName) + 1) % order.length], true);
-};
-
-const transport = createTransport({max: T_MAX, speed: 1.6});
-
-$('view-space').onclick = () => setView(false, true);
-$('view-time').onclick = () => setView(true, true);
-$('reset-camera').onclick = () => setFraming(targetBlend > .5 ? 'time' : spaceFraming);
-for (const id of ['earth', 'ship', 'return']) $('frame-' + id).onclick = () => setFrame(id, true);
-for (const chip of document.querySelectorAll('.chip')) {
-  chip.onclick = () => { layers[chip.dataset.layer] = !layers[chip.dataset.layer]; applyLayers(); };
-}
-// Speed changes take effect immediately, without restarting the run.
-$('speed').addEventListener('input', event => {
-  settings.v = +event.target.value;
-  rebuild();
-  phi = targetPhi;
-});
-$('round-trip').addEventListener('change', event => {
-  settings.roundTrip = event.target.checked;
-  rebuild();
-  transport.restart();
-});
-function showPanel(open) {
-  $('panel').classList.toggle('sheet-closed', !open);
-  $('panel-toggle').setAttribute('aria-expanded', String(open));
-}
-$('panel-toggle').onclick = () => showPanel($('panel').classList.contains('sheet-closed'));
-bindDialog($('notes'), $('about'), () => transport.setPlaying(false));
-stage.onContextLost = () => transport.setPlaying(false);
-const toggleView = () => setView(targetBlend < .5, true);
-bindKeys({
-  ' ': () => transport.toggle(),
-  ArrowRight: () => transport.nudge(.5),
-  ArrowLeft: () => transport.nudge(-.5),
-  f: cycleFrame, F: cycleFrame, t: toggleView, T: toggleView,
-  r: () => transport.restart(), R: () => transport.restart(),
 });
 
-const story = createStory({
-  steps,
-  onEnter(step, index) {
-    settings.roundTrip = step.trip === 'round';
-    frameName = step.frame;
-    rebuild();
-    spaceFraming = step.camera ?? 'overview';
-    setView(step.view === 'time');
-    applyLayers(step.layers);
-    showPanel(index === steps.length - 1 && !narrow());
-    setFraming(step.view === 'time' ? 'time' : spaceFraming);
-    showTip(0, 0, null);
-    transport.restart();
-  },
-});
-
-rebuild();
-update(0);
-offset.set(...FRAMING.overview());
-anchor.copy(computeAnchorGoal());
-controls.target.copy(anchor);
-camera.position.copy(anchor).add(offset);
-controls.update();
-story.show(0);
-new ResizeObserver(() => stage.resize()).observe($('story'));
-new ResizeObserver(() => stage.resize()).observe($('readout'));
-new ResizeObserver(() => {
-  document.documentElement.style.setProperty('--dock-h', `${$('transport').offsetHeight}px`);
-  stage.resize();
-}).observe($('transport'));
-
-let lastFrame = performance.now();
-function frame(time) {
+// ---------------------------------------------------------------- loop
+let last = performance.now(), lastBoard = 0;
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (tween) {
+    const u = Math.min(1, (now - tween.t0) / 700), e = u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+    lab.w = Math.tanh(tween.from + (tween.to - tween.from) * e);
+    lab.cx = tween.cx0 + (tween.cx1 - tween.cx0) * e;
+    if (u >= 1) tween = null;
+  } else if (lab.follow) {
+    const p = lab.bodyNow(lab.follow);
+    if (p) lab.cx = p.xp;
+  }
+  if (lab.playing) {
+    lab.T += dt * lab.speed;
+    if (lab.T >= lab.route.range[1]) { lab.T = lab.route.range[1]; setPlaying(false); }
+  }
+  draw();
+  if (now - lastBoard > 120) { lastBoard = now; renderBoard(); }
   requestAnimationFrame(frame);
-  const dt = Math.max(0, Math.min((time - lastFrame) / 1000, .08));
-  lastFrame = time;
-  if (!document.hidden) transport.tick(dt);
-  const ease = Math.min(1, dt * 3.5);
-  if (blend !== targetBlend) { blend += (targetBlend - blend) * ease; if (Math.abs(blend - targetBlend) < 1e-3) blend = targetBlend; }
-  if (phi !== targetPhi) { phi += (targetPhi - phi) * ease; if (Math.abs(phi - targetPhi) < 1e-4) phi = targetPhi; }
-
-  update(transport.t);
-
-  controls.update();
-  offset.copy(camera.position).sub(controls.target);
-  if (offsetTween) {
-    offsetTween.u = Math.min(1, offsetTween.u + dt / 1.3);
-    const k = offsetTween.u < .5 ? 2 * offsetTween.u ** 2 : 1 - (-2 * offsetTween.u + 2) ** 2 / 2;
-    offset.lerpVectors(offsetTween.from, offsetTween.to, k);
-    if (offsetTween.u === 1) offsetTween = null;
-  }
-  anchor.lerp(computeAnchorGoal(), reducedMotion ? 1 : Math.min(1, dt * 5));
-  controls.target.copy(anchor);
-  camera.position.copy(anchor).add(offset);
-  stage.setFogFor(offset.length());
-
-  updateReadout();
-  updateLabels();
-  stage.render();
 }
+setTool('move');
+loadRoute(routes[0]);
 requestAnimationFrame(frame);
 
-// With ?debug in the URL, expose hooks for checks: jump to a time and finish camera and frame moves at once.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__sr = {
-    settings, story,
-    at(t) { const s = $('scrub'); s.value = t; s.dispatchEvent(new Event('input')); },
-    snap() { if (offsetTween) offsetTween.u = .999; blend = targetBlend; phi = targetPhi; update(transport.t); anchor.copy(computeAnchorGoal()); },
+    lab, routes,
+    load: id => loadRoute(routes.find(r => r.id === id)),
+    at: T => { lab.T = T; setPlaying(false); renderBoard(); draw(); return T; },
+    ride: name => { const fr = lab.frames().find(x => x.name === name); setFrame(fr.w, fr.name, false); renderBoard(); draw(); return fr; },
+    snap: () => ({T: lab.T, w: lab.w, ride: lab.ride, insight: $('insight').textContent, pair: $('pair').textContent,
+      bodies: lab.bodies.map(b => { const p = lab.bodyNow(b); return p && {name: b.name, xp: +p.xp.toFixed(3), tau: +p.tau.toFixed(3)}; })}),
   };
 }

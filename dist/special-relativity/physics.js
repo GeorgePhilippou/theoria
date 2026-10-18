@@ -108,3 +108,52 @@ export function sliceAt(events, phi, tNow) {
 
 /** Earth's clock reading on the ship's line of simultaneity through event e, for ship speed u. */
 export const earthTimeSimultaneousWith = ([t, x], u) => t - u * x;
+
+// ---------------------------------------------------------------- the sandbox: bodies seen from any frame
+// Bodies move in straight legs in the platform frame S. A leg starts at S event (t0, x0), where the body's own
+// clock reads tau0, and moves at u until tEnd. Frames are named by their velocity w relative to S.
+
+/** Velocity addition: something moving at u in a frame that itself moves at w (both along x). */
+export const addVelocities = (u, w) => (u + w) / (1 + u * w);
+
+/** Coordinates [t′, x′] in frame w of S event e, and back again. */
+export const toFrame = (e, w) => boost(e, rapidity(w));
+export const fromFrame = (e, w) => boost(e, -rapidity(w));
+
+/**
+ * The S event where a point moving uniformly (through S event (t0, x0) at velocity u) meets the "now" t′ = T
+ * of frame w. Solves γ_w (t − w x) = T with x = x0 + u (t − t0).
+ */
+export function lineMeetsNow(t0, x0, u, w, T) {
+  const t = (T / gamma(w) + w * (x0 - u * t0)) / (1 - w * u);
+  return [t, x0 + u * (t - t0)];
+}
+
+/**
+ * Reading of a clock riding a rigid body that moves at u, its clocks synchronised in its own frame
+ * (Einstein's convention), when the clock at S event (t0, x0) reads tau0. Valid for any point of the body.
+ */
+export const bodyClock = (t0, x0, u, tau0, [t, x]) => tau0 + gamma(u) * ((t - t0) - u * (x - x0));
+
+/** Fills in tEnd for each leg (the next leg's t0, or +∞). */
+export function chainLegs(legs) {
+  return legs.map((leg, i) => ({...leg, tEnd: legs[i + 1]?.t0 ?? Infinity}));
+}
+
+/**
+ * Where a body following `legs` (with tEnd) is at time T of frame w, offset ξ along its own length
+ * (rest-frame distance from its centre; only meaningful on a single straight leg).
+ * Returns {t, x (S), tp, xp (frame w), tau (its clock there), leg} or null if it does not exist yet.
+ */
+export function bodyAtNow(legs, w, T, xi = 0) {
+  for (const leg of legs) {
+    const x0 = leg.x0 + xi / gamma(leg.u);
+    const [t, x] = lineMeetsNow(leg.t0, x0, leg.u, w, T);
+    if (t < leg.t0 - 1e-9 && leg === legs[0] && !leg.forever) return null;
+    if ((t >= leg.t0 - 1e-9 || leg.forever) && t < leg.tEnd) {
+      const [tp, xp] = toFrame([t, x], w);
+      return {t, x, tp, xp, tau: bodyClock(leg.t0, leg.x0, leg.u, leg.tau0, [t, x]), leg};
+    }
+  }
+  return null;
+}

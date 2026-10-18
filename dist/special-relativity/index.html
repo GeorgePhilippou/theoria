@@ -3,153 +3,102 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ece4d2">
-<meta name="description" content="An interactive, exact look at moving clocks, the relativity of simultaneity, length contraction and the twin paradox.">
+<meta name="theme-color" content="#262b12">
+<meta name="description" content="The relativity railway: ride any train and watch clocks, lengths and simultaneity change. Light clocks, the tunnel paradox, the twins and velocity addition, with exact Lorentz transformations.">
 <title>Special Relativity · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Special Relativity · Theoria">
-<meta property="og:description" content="An interactive, exact look at moving clocks, the relativity of simultaneity, length contraction and the twin paradox.">
+<meta property="og:description" content="The relativity railway: ride any train and watch clocks, lengths and simultaneity change, with exact Lorentz transformations.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="../shared/shell.css">
-<script type="importmap">{"imports":{"three":"../vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="rail.css">
 </head>
-<body class="v2 riso">
-<main class="stage" aria-label="Special relativity experiment">
-  <canvas id="scene" aria-label="Rotatable 3D view of space and time for a moving ship and Earth"></canvas>
-
-  <header class="topbar">
-    <a class="wordmark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Special relativity · Moving clocks</span></a>
-    <nav class="view-switch" aria-label="View">
-      <button id="view-space" class="active" aria-pressed="true">Space</button>
-      <button id="view-time" aria-pressed="false">Time</button>
-    </nav>
-    <button id="reset-camera" class="icon-button" aria-label="Reset camera" title="Reset camera">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5M3 2.5v3h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-    </button>
-    <button id="about" class="icon-button" aria-label="What is calculated, and how" title="The physics">i</button>
+<body>
+<main class="rail" aria-label="The relativity railway">
+  <header class="board">
+    <a class="brand" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Special relativity · the relativity railway</span></a>
+    <div class="readout"><small>Riding with</small><span class="flaps" id="flap-frame" aria-live="polite"></span></div>
+    <div class="readout"><small>Time on your clocks</small><span class="flaps" id="flap-time"></span></div>
+    <button id="play" class="bbtn play" aria-label="Pause"></button>
+    <div class="bgroup" role="group" aria-label="Simulation speed">
+      <button class="bbtn" data-speed="0.5">½×</button>
+      <button class="bbtn on" data-speed="1.5">1×</button>
+      <button class="bbtn" data-speed="4">3×</button>
+    </div>
+    <button id="restart" class="bbtn">Restart</button>
+    <button id="about" class="bbtn" aria-label="What is calculated, and how" title="The physics">i</button>
+    <a class="next wide-only" href="../light/">Next: Light as a wave →</a>
   </header>
 
-  <section class="story glass" id="story" aria-live="polite"></section>
-
-  <div class="labels" aria-hidden="true">
-    <div class="scene-label" id="label-earth"><div class="tag"><span class="name"><i class="swatch" style="--c:#c8541f"></i>Earth</span></div></div>
-    <div class="scene-label" id="label-ship"><div class="tag"><span class="name"><i class="swatch" style="--c:#56612a"></i>Ship</span></div></div>
-    <div class="scene-label landmark" id="label-cone"><div class="tag"><span class="name">Light cone</span></div></div>
-    <div class="scene-label landmark" id="label-cut-earth"><div class="tag"><span class="name" id="label-cut-earth-text" style="color:#c8541f"></span></div></div>
-    <div class="scene-label landmark" id="label-cut-ship"><div class="tag"><span class="name" id="label-cut-ship-text" style="color:#56612a"></span></div></div>
-    <div class="scene-label landmark" id="label-back"><div class="tag"><span class="name" id="label-back-text"></span></div></div>
-    <div class="scene-label landmark" id="label-front"><div class="tag"><span class="name" id="label-front-text"></span></div></div>
-    <div id="dynamic-labels"></div>
-  </div>
-
-  <section class="readout glass" id="readout" aria-label="Readings in the chosen frame">
-    <div class="readout-row">
-      <i class="swatch" style="--c:#c8541f"></i>
-      <span class="who">Earth’s clock<small id="earth-where"></small></span>
-      <strong id="earth-tau"></strong>
-      <span class="sub" id="earth-sub" hidden></span>
-      <span class="bar"><i id="bar-earth" style="--c:#c8541f"></i></span>
-    </div>
-    <div class="readout-row">
-      <i class="swatch" style="--c:#56612a"></i>
-      <span class="who">Ship’s clock<small id="ship-where"></small></span>
-      <strong id="ship-tau"></strong>
-      <span class="sub" id="ship-sub"></span>
-      <span class="bar"><i id="bar-ship" style="--c:#56612a"></i></span>
-    </div>
-    <div class="readout-row" id="row-flash">
-      <i class="swatch" style="--c:#2f3614"></i>
-      <span class="who">Flash<small>in this frame</small></span>
-      <strong id="flash-gap" class="text-value"></strong>
-      <span class="sub" id="flash-sub"></span>
-    </div>
+  <section id="track" aria-label="The track, seen from the frame you ride with">
+    <div class="panel-head"><span class="sign">The line</span>
+      <p>Everything at one moment of <b>your</b> time. The rails and station clocks belong to the platform; each train carries its own clocks, synchronised in its own frame.</p></div>
+    <div class="ride" id="ride"><span>Ride with</span></div>
+    <canvas id="c-track" aria-label="The track: platform, trains, clocks and light at the present moment"></canvas>
   </section>
 
-  <aside class="panel glass sheet-closed" id="panel" aria-label="Layers and settings">
-    <span class="eyebrow">Show</span>
-    <div class="chips">
-      <button class="chip" data-layer="clock" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Light clock</button>
-      <button class="chip" data-layer="flash" aria-pressed="false"><i class="swatch" style="--c:#2f3614"></i>Flash</button>
-      <button class="chip" data-layer="simultaneity" aria-pressed="false"><i class="swatch" style="--c:#56612a"></i>“Now” sheets</button>
-      <button class="chip" data-layer="invariants" aria-pressed="false"><i class="swatch" style="--c:#8a8c68"></i>Light cone &amp; invariants</button>
+  <section id="diag" aria-label="Spacetime diagram">
+    <div class="panel-head"><span class="sign">Timetable of spacetime</span>
+      <p>Distance across, your time up. Light always climbs at 45°. Each moment of the line above is one horizontal slice: the dashed <b>now</b>.</p>
+      <div class="toggles">
+        <button class="btn" id="t-nows" aria-pressed="true">Other frames’ “now”</button>
+        <button class="btn" id="t-hyper" aria-pressed="true">Invariant curves</button>
+      </div></div>
+    <div class="canvas-wrap"><canvas id="c-diag" aria-label="Spacetime diagram of the trains, light and events"></canvas></div>
+    <label class="scrub"><span>Your time</span><input id="scrub" type="range" min="0" max="20" step="0.01" aria-label="Time in the frame you ride with"></label>
+  </section>
+
+  <aside class="side" aria-label="Routes, events and tools">
+    <div>
+      <p class="label">Routes</p>
+      <div class="routes" id="routes"></div>
     </div>
-    <details class="settings">
-      <summary>Settings</summary>
-      <label class="toggle"><input id="round-trip" type="checkbox"> Round trip (turn around at Earth time 10 s)</label>
-      <p class="hint">Distances in light-seconds, times in seconds. The ship is 4 light-seconds long at rest.</p>
-    </details>
+    <div class="ticket" id="ticket" aria-live="polite"></div>
+    <div class="insight" id="insight" aria-live="polite"></div>
+    <div class="departures">
+      <p class="label">Events, in your frame</p>
+      <table><thead><tr><th>Event</th><th>t (s)</th><th>x (ls)</th></tr></thead><tbody id="events"></tbody></table>
+      <p class="pair" id="pair"></p>
+      <p class="hint">Tap two events to compare them. Change trains and watch which numbers change.</p>
+    </div>
+    <div class="bench">
+      <p class="label">Tools · in the spacetime diagram</p>
+      <div class="tools" id="tools">
+        <button class="btn on" data-tool="move" aria-pressed="true">Move</button>
+        <button class="btn" data-tool="train" aria-pressed="false">+ Train</button>
+        <button class="btn" data-tool="flash" aria-pressed="false">+ Flash</button>
+        <button class="btn" data-tool="mark" aria-pressed="false">+ Event</button>
+      </div>
+      <p class="tool-hint" id="tool-hint"></p>
+      <label class="slider" id="speed-row" hidden><span>New train’s speed (in your frame) <output id="out-v">0.60 c</output></span>
+        <input id="new-v" type="range" min="-0.95" max="0.95" step="0.05" value="0.6"></label>
+      <button class="btn" id="clear" style="margin-top:10px">Clear the line</button>
+    </div>
   </aside>
-
-  <footer class="transport dock glass" id="transport">
-    <button id="play" class="round-button" aria-label="Play"></button>
-    <div class="timeline">
-      <div class="timeline-label">
-        <span>Time in this frame<b id="time-readout">0.0</b>s</span>
-        <span class="note" id="view-note"></span>
-      </div>
-      <div class="track">
-        <input id="scrub" type="range" min="0" max="26" step="0.02" value="0" aria-label="Time in the chosen frame">
-        <div class="markers" id="markers" aria-hidden="true"></div>
-      </div>
-    </div>
-    <div class="dock-group">
-      <span class="dock-label">Seen from</span>
-      <div class="segmented" role="group" aria-label="Seen from">
-        <button id="frame-earth" class="active" aria-pressed="true">Earth</button>
-        <button id="frame-ship" aria-pressed="false">Ship</button>
-        <button id="frame-return" aria-pressed="false" hidden>Ship ↩</button>
-      </div>
-    </div>
-    <div class="dock-group speed">
-      <span class="dock-label">Ship speed <output id="out-v"></output></span>
-      <input id="speed" type="range" min="0.1" max="0.98" step="0.01" value="0.6" aria-label="Ship speed as a fraction of light speed">
-    </div>
-    <div class="dock-actions">
-      <button id="replay" class="text-button" title="Replay (R)">Replay</button>
-      <button id="panel-toggle" class="text-button" aria-expanded="false" aria-controls="panel">Layers</button>
-    </div>
-  </footer>
-  <div id="tip" role="status" aria-live="polite"></div>
-
-  <div id="toast" role="status"></div>
-  <div id="fallback" hidden><h2>This experiment needs WebGL.</h2><p>Open it in a current version of Safari, Chrome or Firefox with graphics acceleration turned on.</p></div>
-
-  <dialog class="notes" id="notes" aria-labelledby="notes-heading">
-    <button class="icon-button close" aria-label="Close">×</button>
-    <span class="eyebrow">Behind the image</span>
-    <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
-    <p>Flat spacetime with no gravity. Light speed c = 1: distances are in light-seconds (ls) and times in seconds. The ship moves along x at speed v; its light clock’s mirrors are 0.5 ls apart across the direction of motion, so one tick (a round trip of the light) is 1 s of the ship’s own time. The ship is 4 ls long at rest.</p>
-
-    <h3>Frames</h3>
-    <p>“Seen from” picks the inertial frame used for every coordinate on screen. All events are computed once, in Earth’s frame, and then transformed exactly:</p>
-    <span class="eq">t′ = γ (t − v x),  x′ = γ (x − v t),  y′ = y,  γ = 1 / √(1 − v²)</span>
-    <p>Switching frames animates through intermediate frames by changing the rapidity φ = artanh v smoothly, so every in-between picture is also a real frame.</p>
-
-    <h3>Clocks</h3>
-    <p>Each clock’s reading is its proper time, τ = ∫ √(1 − u²) dt along its worldline. The readout shows both clocks at the moment “now” of the chosen frame.</p>
-
-    <h3>The flash</h3>
-    <p>Light leaves the ship’s centre at ship time 4 s and reaches both ends 2 s later in the ship’s frame. In Earth’s frame the back is lit γ v L₀ earlier than the front. The expanding ring is the light, which is a circle around the emission point in every frame.</p>
-
-    <h3>Length</h3>
-    <p>A body’s length is the distance between its ends at the same time, in the frame doing the measuring: L = L₀ / γ along the motion. Distances across the motion do not change.</p>
-
-    <h3>Round trip</h3>
-    <p>The ship turns around instantly at Earth time 10 s (ship time 8 s at 0.6 c) and is home at 20 s, having aged 16 s. Real ships accelerate gradually; that changes the details at the turn, not the result. “Seen from: Ship, returning” uses the inertial frame of the return leg. During the turn itself the ship has no single inertial frame, so the ship’s body is drawn rigid within each leg.</p>
-
-    <h3>Touch and keys</h3>
-    <p>Drag to orbit, pinch or scroll to zoom. In Time view, hover or tap a tick mark or a flash event to see its coordinates in both frames. Keys: Space play/pause, ← → step, F switch frame, T Space/Time, R replay.</p>
-
-    <h3>Invariants</h3>
-    <p>The light cone (t² = x² + y²) and the curves t² − x² = constant are the same in every frame, so they stay still while events slide along them.</p>
-
-    <p class="honest">Drawn for clarity: the size of Earth (shown far too small to be to scale, but contracted correctly when it moves), its spin (tied to its own clock but sped up), the ship’s shape, glows and colours, and the 45° light cone (it relies on drawing 1 s of time and 1 ls of space at the same size). The view shows coordinates, not what a camera would see: light-travel delays, Doppler shifts and the visual rotation of fast objects are not rendered.</p>
-
-    <p>Further reading: <a href="https://www.einstein-online.info/en/category/elementary/special-relativity-elementary/" target="_blank" rel="noopener">Einstein Online · Special relativity</a> · Taylor &amp; Wheeler, <em>Spacetime Physics</em></p>
-    <span class="version">Theoria · Special relativity 0.3 · Flat spacetime, motion along one line</span>
-  </dialog>
 </main>
+<div class="tip" id="tip" role="status"></div>
+
+<dialog class="about" id="notes" aria-labelledby="notes-heading">
+  <button class="bbtn close btn" aria-label="Close">×</button>
+  <p class="label">Behind the timetable</p>
+  <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
+  <p>Times are in seconds and distances in light-seconds (ls), so light moves 1 ls per second and every light ray in the diagram climbs at 45°. Speeds are fractions of the speed of light, c.</p>
+  <p>Every position, time and clock reading comes from the Lorentz transformation between the platform frame and the frame you ride with:</p>
+  <span class="eq">t′ = γ (t − v x),  x′ = γ (x − v t),  γ = 1/√(1 − v²)</span>
+  <h3>Clocks and simultaneity</h3>
+  <p>Each train’s clocks are synchronised in that train’s own frame, by Einstein’s convention (light signals take equal times both ways). Seen from another frame, a moving train’s clocks run slow by γ and are out of step along its length: the clock at the front lags the one at the back by v L₀, where L₀ is the train’s own length. That is why the same pair of events can be simultaneous for one train and not for another.</p>
+  <h3>Lengths</h3>
+  <p>A moving train is shorter by γ, because measuring its length means marking both ends at the same moment, and “the same moment” differs between frames. Nothing is squeezed: in its own frame the train is always L₀ long.</p>
+  <h3>Invariants</h3>
+  <p>The interval s² = Δt² − Δx² between two events is the same in every frame. The curves t² − x² = constant are drawn in the diagram; they do not move when you change trains, while everything else slides along them.</p>
+  <h3>The twins</h3>
+  <p>The traveller turns round instantly. Riding with it, its “now” line swings at the turn, and the home clock’s reading on that line jumps forward: that is where the extra years of the stay-at-home twin are found.</p>
+  <h3>Keys</h3>
+  <p>Space pause · R restart · 1–7 routes · F next frame.</p>
+  <p class="honest">Drawn for clarity: the height of the trains, the clock faces and the speed of play. Trains are rigid and move in straight lines (the traveller’s turn is instant), and nothing here includes gravity or the travel time of light to your eye: what is shown is what each frame measures, not what a camera would see.</p>
+  <p>Further reading: Taylor &amp; Wheeler, <em>Spacetime Physics</em> · <a href="https://www.feynmanlectures.caltech.edu/I_15.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 15</a></p>
+  <p class="label" style="margin-top:12px">Theoria · Special relativity 0.4 · The relativity railway</p>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>

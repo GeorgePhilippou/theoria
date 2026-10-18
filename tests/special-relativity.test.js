@@ -95,3 +95,46 @@ test('sliceAt finds the crossing with a tilted now', () => {
   const q = sr.sliceAt(line, .3, 4);
   close(sr.boost([q[0], q[1]], -.3)[1] / sr.boost([q[0], q[1]], -.3)[0], .5, 1e-12, 'still on the line');
 });
+
+test('velocity addition never exceeds c, and light moves at c in every frame', () => {
+  close(sr.addVelocities(.6, .6), 1.2 / 1.36, 1e-14);
+  close(sr.addVelocities(1, .9), 1, 1e-14, 'light from a moving source');
+  close(sr.addVelocities(.99, .99), 1.98 / 1.9801, 1e-14);
+  const a = sr.toFrame([0, 0], .7), b = sr.toFrame([5, 5], .7);
+  close((b[1] - a[1]) / (b[0] - a[0]), 1, 1e-12, 'a light ray still has slope 1');
+  const back = sr.fromFrame(sr.toFrame([3, -2], -.4), -.4);
+  close(back[0], 3, 1e-12); close(back[1], -2, 1e-12);
+});
+
+test('a point meets a frame’s now on that now, and moving trains’ leading clocks lag by v L0', () => {
+  const [t, x] = sr.lineMeetsNow(2, 1, .5, -.6, 7);
+  close(sr.toFrame([t, x], -.6)[0], 7, 1e-12, 'on the now line');
+  close(x - 1, .5 * (t - 2), 1e-12, 'on the worldline');
+  // Train of rest length 8 at v = 0.6, centre clock reads 0 at S origin. At one S time its ends:
+  const u = .6, L0 = 8, legs = sr.chainLegs([{t0: 0, x0: 0, u, tau0: 0}]);
+  const back = sr.bodyAtNow(legs, 0, 5, -L0 / 2), front = sr.bodyAtNow(legs, 0, 5, L0 / 2);
+  close(front.x - back.x, L0 / sr.gamma(u), 1e-12, 'contracted in S');
+  close(back.tau - front.tau, u * L0, 1e-12, 'leading clock lags by v L0');
+  // In the train's own frame the ends are L0 apart and their clocks agree.
+  const b2 = sr.bodyAtNow(legs, u, 5, -L0 / 2), f2 = sr.bodyAtNow(legs, u, 5, L0 / 2);
+  close(f2.xp - b2.xp, L0, 1e-12); close(f2.tau, b2.tau, 1e-12); close(f2.tau, 5, 1e-12);
+});
+
+test('the tunnel paradox: doors close together for the platform, not for the train', () => {
+  const u = .8, L0 = 10, tunnel = 6;           // γ = 5/3, so the train is 6 long in S
+  const legs = sr.chainLegs([{t0: 0, x0: 0, u, tau0: 0}]);
+  const back = sr.bodyAtNow(legs, 0, 0, -L0 / 2), front = sr.bodyAtNow(legs, 0, 0, L0 / 2);
+  close(back.x, -tunnel / 2, 1e-12); close(front.x, tunnel / 2, 1e-12);
+  const [tIn] = sr.toFrame([0, -tunnel / 2], u), [tOut] = sr.toFrame([0, tunnel / 2], u);
+  close(tIn - tOut, sr.gamma(u) * u * tunnel, 1e-12, 'in the train frame the far door closes first');
+});
+
+test('a body on several legs is found on the right leg, with its own clock', () => {
+  const v = .8, legs = sr.chainLegs([{t0: 0, x0: 0, u: v, tau0: 0}, {t0: 10, x0: 8, u: -v, tau0: 6}, {t0: 20, x0: 0, u: 0, tau0: 12}]);
+  const mid = sr.bodyAtNow(legs, 0, 15);
+  close(mid.x, 4, 1e-12); close(mid.tau, 9, 1e-12);
+  close(sr.bodyAtNow(legs, 0, 25).tau, 17, 1e-12, 'home: 12 + 5');
+  assert.equal(sr.bodyAtNow(legs, 0, -1), null, 'not launched yet');
+  const seen = sr.bodyAtNow(legs, -v, 4);
+  close(sr.toFrame([seen.t, seen.x], -v)[0], 4, 1e-12);
+});
