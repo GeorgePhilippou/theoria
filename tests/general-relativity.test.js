@@ -143,3 +143,17 @@ test('a ray aimed from any point is captured below L = 3√3/2 and escapes above
   const orbit = gr.traceRay(1.5 + 1e-6, 0, 0, 1);
   assert.ok(gr.sweptAngle(orbit.points) > 2 * Math.PI, 'wraps at least once round the photon sphere');
 });
+
+test('river of space: a clock held still swims at the river speed, and a raindrop keeps rain time', () => {
+  for (const r of [1.2, 2, 5, 20]) {
+    const v = gr.riverSpeed(r);
+    close(Math.sqrt(1 - v * v), gr.rate(r), 1e-12, 'special-relativity slowing at the river speed equals gravitational slowing');
+  }
+  close(gr.riverSpeed(1), 1, 1e-15, 'the river flows at c at the horizon');
+  // Follow a raindrop from 10 to 1 in EF time; its own time is (2/3)(r₁^1.5 − r₂^1.5) and T = t̃ + h(r).
+  let r = 10, ef = 0;
+  const h = 1e-5;
+  while (r > 1) { const k1 = gr.riverDrift(r), k2 = gr.riverDrift(r + k1 * h / 2); r += k2 * h; ef += h; }
+  const tau = 2 / 3 * (10 ** 1.5 - 1);
+  close(ef, tau - (gr.rainOffset(1) - gr.rainOffset(10)), 1e-3, 'EF time of the fall');
+});

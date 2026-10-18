@@ -250,3 +250,20 @@ export function traceRay(x, y, dx, dy, {rOut = 16, stepSize = .03, maxSteps = 60
   }
   return {points, outcome: 'limit', L};
 }
+
+// ---------------------------------------------------------------- the river model (Gullstrand–Painlevé)
+// The same spacetime written as flat space flowing inwards: a "raindrop" falling from rest far away moves through
+// space at v = √(rₛ/r) as measured by anyone held still where it passes, and light always moves at c relative to it.
+// Rain time T = t + 2√r + ln|(√r − 1)/(√r + 1)| is the raindrops' own time; T = t̃ + h(r) with h = 2√r − 2 ln(1 + √r).
+
+/** Speed of the inflowing "river" of space at r, in units of c (equal to 1 at the horizon). */
+export const riverSpeed = r => 1 / Math.sqrt(r);
+
+/** Rain time minus Eddington–Finkelstein time at r. */
+export const rainOffset = r => 2 * Math.sqrt(r) - 2 * Math.log(1 + Math.sqrt(r));
+
+/** dr/dt̃ for a raindrop (the river itself), from dr/dT = −√(1/r) and dT = dt̃ + h′(r) dr with h′ = 1/(1 + √r). */
+export function riverDrift(r) {
+  const b = riverSpeed(r);
+  return -b / (1 + b / (1 + Math.sqrt(r)));
+}
