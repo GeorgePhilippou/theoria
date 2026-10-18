@@ -10,17 +10,11 @@ const C = {
 };
 const PALETTE = [C.spot, C.olive, '#9a5a1c', C.oliveDark, C.ink3, '#a8432b'];
 const PAD = {l: 36, r: 12};
-const HINTS = {
-  move: 'Drag an event to move it, or a train’s round handle to change its speed. Drag empty space to pan.',
-  train: 'Click in the diagram: a new train passes that event at the speed below, measured in your frame.',
-  flash: 'Click in the diagram to set off a flash of light there. It spreads both ways at c.',
-  mark: 'Click in the diagram to mark an event, then tap two events on the board to compare them.',
-};
 
 // ---------------------------------------------------------------- the world
 const lab = {
   bodies: [], tunnels: [], events: [], route: null, select: [],
-  w: 0, wTarget: 0, ride: 'Platform', T: 0, playing: true, speed: 1.5, tool: 'move', cx: 0, cxTarget: 0, newV: .6,
+  w: 0, wTarget: 0, ride: 'Platform', T: 0, playing: true, speed: 1.5, cx: 0, selected: null,
   show: {nows: true, hyper: true}, colorIndex: 0,
 
   addTrain({name, v = 0, L0 = 4, x0 = 0, legs, lightClock = false, ship = false}) {
@@ -191,6 +185,7 @@ function drawBodyOnTrack(ctx, fig, b) {
   ctx.closePath();
   ctx.fillStyle = riding ? b.color : C.paper2; ctx.fill();
   ctx.strokeStyle = b.color; ctx.lineWidth = 2.4; ctx.stroke();
+  if (lab.selected?.ref === b) { ctx.save(); ctx.strokeStyle = C.spot; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5; ctx.strokeRect(left - 6, top - 6, right - left + 12, bottom - top + 12); ctx.restore(); }
   // Windows: evenly spaced along the train in its own frame, so they bunch up with it.
   if (!b.ship && b.legs.length === 1 && right - left > 30) {
     ctx.fillStyle = riding ? 'rgba(244,238,224,.75)' : 'rgba(86,97,42,.22)';
@@ -290,7 +285,7 @@ function drawDiag() {
         ctx.beginPath(); ctx.moveTo(...p1); ctx.lineTo(...p2); ctx.moveTo(...p3); ctx.lineTo(...p4); ctx.stroke();
       }
       const [c1, c2] = worldPath(ctx, fig, leg, 0, ta, tb);
-      ctx.strokeStyle = b.color; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.stroke();
+      ctx.strokeStyle = b.color; ctx.lineWidth = lab.selected?.ref === b ? 4 : 2.4; ctx.beginPath(); ctx.moveTo(...c1); ctx.lineTo(...c2); ctx.stroke();
       // Ticks every second of the body's own time.
       const g = sr.gamma(leg.u), tauA = leg.tau0 + (ta - leg.t0) / g, tauB = leg.tau0 + (tb - leg.t0) / g;
       for (let tau = Math.ceil(Math.max(tauA, -60)); tau <= Math.min(tauB, 120); tau++) {
@@ -375,80 +370,154 @@ function handleOf(b) {
 
 function draw() { if (lab.route && figs.track.dpr && figs.diag.dpr) { drawTrack(); drawDiag(); } }
 
-// ---------------------------------------------------------------- side column
-function flaps(el, s, n) {
-  const str = s.toUpperCase().padEnd(n).slice(0, n);
-  el.innerHTML = [...str].map(c => `<span class="${c === ' ' ? 'blank' : ''}">${c === ' ' ? '&nbsp;' : c}</span>`).join('');
-  el.setAttribute('aria-label', s);
-}
-function renderRoute() {
+// ---------------------------------------------------------------- the sheet
+const fmt = (x, d = 2) => (Math.abs(x) < 5e-3 ? 0 : x).toFixed(d);
+const row = (k, v) => `<tr><th>${k}</th><td class="num">${v}</td></tr>`;
+function renderPlate() {
   const r = lab.route;
-  $('routes').innerHTML = routes.map((x, i) => `<button class="route${x === r ? ' on' : ''}" data-id="${x.id}"><i>${String(i + 1).padStart(2, '0')}</i>${x.label}</button>`).join('');
-  $('ticket').innerHTML = `<h1>${r.title}</h1>${r.text}<div class="formula">${r.formula}<small>${r.note}</small></div>
-    <p class="label">Try</p><ul class="try">${r.tries.map(t => `<li>${t}</li>`).join('')}</ul>`;
+  $('plates').innerHTML = routes.map((x, i) => `<button class="tab${x === r ? ' on' : ''}" data-id="${x.id}"><b>${String(i + 1).padStart(2, '0')}</b>${x.label}</button>`).join('');
+  $('note').innerHTML = `<p class="letter"><span>Plate ${String(routes.indexOf(r) + 1).padStart(2, '0')} · notes</span></p><h1>${r.title}</h1>${r.text}
+    <div class="formula">${r.formula}<small>${r.note}</small></div><p class="letter">Try</p><ul class="try">${r.tries.map(t => `<li>${t}</li>`).join('')}</ul><div class="insight" id="insight"></div>`;
   renderRide();
 }
 function renderRide() {
-  const ride = $('ride');
-  ride.innerHTML = '<span>Ride with</span>' + lab.frames().map(fr =>
-    `<button class="btn${fr.name === lab.ride ? ' on' : ''}" data-frame="${fr.name}"><i style="--c:${fr.body?.color ?? C.ink4}"></i>${fr.name}</button>`).join('') +
-    `<label class="lever">Any speed <input id="lever" type="range" min="-0.95" max="0.95" step="0.01" value="${lab.wTarget}" aria-label="Your speed relative to the platform"><output id="out-lever">${f2(lab.wTarget)} c</output></label>`;
-  $('lever').oninput = event => { setFrame(+event.target.value, 'Custom', false); };
+  $('ride').innerHTML = lab.frames().map(fr => `<button class="tab${fr.name === lab.ride ? ' on' : ''}" data-frame="${fr.name}"><i style="--c:${fr.body?.color ?? C.ink4}"></i>${fr.name}</button>`).join('') +
+    `<label class="lever wide-only">or <input id="lever" type="range" min="-0.95" max="0.95" step="0.01" value="${lab.wTarget}" aria-label="Your speed relative to the platform"><output id="out-lever">${fmt(lab.wTarget)} c</output></label>`;
+  $('lever').oninput = event => { setFrame(+event.target.value, 'Custom', false); renderReadings(); };
 }
-function renderBoard() {
-  flaps($('flap-frame'), lab.ride, 16);
-  flaps($('flap-time'), `${lab.T < 0 ? '-' : ' '}${Math.abs(lab.T).toFixed(2).padStart(5, '0')}`, 6);
+const sel = () => lab.selected;
+function renderSelected() {
+  const o = sel(), el = $('selected');
+  if (!o) { el.innerHTML = '<p class="letter"><span>Specification</span></p><p class="empty">Select a train, traveller, tunnel or event on the board, or add one from the tray.</p>'; return; }
+  let rows = '', controls = '';
+  if (o.kind === 'body' && !o.ref.ship) {
+    const b = o.ref, leg = b.legs.at(-1);
+    rows = row('Train', b.name) + row('Speed on the platform', `${fmt(leg.u)} c`) + row('Length (its own)', `${fmt(b.L0, 1)} ls`) + row('Light clock', b.lightClock ? 'on board' : 'none');
+    controls = `<label><span>Speed on the platform <output>${fmt(leg.u)} c</output></span><input type="range" id="sel-u" min="-0.95" max="0.95" step="0.01" value="${leg.u}"></label>
+      <label><span>Length <output>${fmt(b.L0, 1)} ls</output></span><input type="range" id="sel-L" min="1" max="14" step="0.5" value="${b.L0}"></label>
+      <div class="row"><button class="tab" id="sel-ride">Ride with ${b.name}</button><button class="tab${b.lightClock ? ' on' : ''}" id="sel-lc">Light clock</button></div>`;
+  } else if (o.kind === 'body') {
+    const b = o.ref, out = b.legs.find(l => l.label === 'out');
+    rows = row('Traveller', b.name) + (out ? row('Speed out and back', `${fmt(out.u)} c`) + row('Turns round at', `t = ${fmt(b.legs.find(l => l.label === 'back')?.t0 ?? 0, 1)} s (platform)`) : row('Path', 'carried along'));
+    if (out) controls = `<label><span>Speed <output>${fmt(out.u)} c</output></span><input type="range" id="sel-tu" min="0.1" max="0.95" step="0.01" value="${out.u}"></label>
+      <label><span>Turn after <output>${fmt(b.turn, 1)} s</output></span><input type="range" id="sel-turn" min="2" max="14" step="0.5" value="${b.turn}"></label>
+      <div class="row"><button class="tab" id="sel-ride">Ride with it, out</button></div>`;
+  } else if (o.kind === 'event') {
+    const e = o.ref, [tp, xp] = sr.toFrame([e.t, e.x], lab.w);
+    rows = row('Event', `${e.name}${e.light ? ', a flash of light' : ''}`) + row('In your frame', `t = ${fmt(tp)} s, x = ${fmt(xp)} ls`) + row('On the platform', `t = ${fmt(e.t)} s, x = ${fmt(e.x)} ls`);
+    controls = `<label><span>Your time t <output>${fmt(tp)} s</output></span><input type="range" id="sel-t" min="${lab.route.range[0]}" max="${lab.route.range[1]}" step="0.05" value="${tp}"></label>
+      <label><span>Your x <output>${fmt(xp)} ls</output></span><input type="range" id="sel-x" min="-16" max="16" step="0.05" value="${xp}"></label>
+      <div class="row"><button class="tab${e.light ? ' on' : ''}" id="sel-light">${e.light ? 'Flash of light' : 'Plain event'}</button></div>`;
+  } else {
+    const tn = o.ref;
+    rows = row('Tunnel', tn.name) + row('Length (its own)', `${fmt(tn.b - tn.a, 1)} ls, at rest on the platform`);
+    controls = `<label><span>Length <output>${fmt(tn.b - tn.a, 1)} ls</output></span><input type="range" id="sel-tl" min="2" max="14" step="0.1" value="${tn.b - tn.a}"></label>`;
+  }
+  el.innerHTML = `<p class="letter"><span>Specification · ${o.ref.name}</span></p><table class="spec">${rows}</table><div class="controls">${controls}<div class="row"><button class="tab" id="sel-remove">Remove ${o.ref.name}</button></div></div>`;
+  bindSelected();
+}
+function rebuildTrain(b, u) {
+  // Change speed from now on, keeping the train's clock and position at this moment of your time.
+  const p = lab.bodyNow(b) ?? lab.bodyNow(b, 0, lab.route.range[0]);
+  b.legs = sr.chainLegs([{t0: p.t, x0: p.x, u, tau0: p.tau, forever: true, label: b.name}]);
+}
+function travellerLegs(b) {
+  const v = b.speed, T = b.turn, t0 = b.start, x0 = b.home;
+  return sr.chainLegs([{t0: t0 - 60, x0, u: 0, tau0: -60, label: 'at home', forever: true}, {t0, x0, u: v, tau0: 0, label: 'out'},
+    {t0: t0 + T, x0: x0 + v * T, u: -v, tau0: T / sr.gamma(v), label: 'back'}, {t0: t0 + 2 * T, x0, u: 0, tau0: 2 * T / sr.gamma(v), label: 'home'}]);
+}
+function bindSelected() {
+  const o = sel(), on = (id, fn, f) => { const e = $(id); if (e) e.oninput = ev => { fn(+ev.target.value); ev.target.previousElementSibling.querySelector('output').textContent = f(+ev.target.value); renderRide(); renderReadings(); draw(); }; };
+  on('sel-u', v => rebuildTrain(o.ref, v), v => `${fmt(v)} c`);
+  on('sel-L', v => { o.ref.L0 = v; }, v => `${fmt(v, 1)} ls`);
+  on('sel-tu', v => { o.ref.speed = v; o.ref.legs = travellerLegs(o.ref); }, v => `${fmt(v)} c`);
+  on('sel-turn', v => { o.ref.turn = v; o.ref.legs = travellerLegs(o.ref); }, v => `${fmt(v, 1)} s`);
+  on('sel-t', v => { const [, xp] = sr.toFrame([o.ref.t, o.ref.x], lab.w); [o.ref.t, o.ref.x] = sr.fromFrame([v, xp], lab.w); }, v => `${fmt(v)} s`);
+  on('sel-x', v => { const [tp] = sr.toFrame([o.ref.t, o.ref.x], lab.w); [o.ref.t, o.ref.x] = sr.fromFrame([tp, v], lab.w); }, v => `${fmt(v)} ls`);
+  on('sel-tl', v => { const c = (o.ref.a + o.ref.b) / 2; o.ref.a = c - v / 2; o.ref.b = c + v / 2; }, v => `${fmt(v, 1)} ls`);
+  const click = (id, fn) => { const e = $(id); if (e) e.onclick = () => { fn(); renderSelected(); renderReadings(); draw(); }; };
+  click('sel-ride', () => { const fr = lab.frames().find(f => f.body === o.ref); if (fr) setFrame(fr.w, fr.name); });
+  click('sel-lc', () => { o.ref.lightClock = !o.ref.lightClock; });
+  click('sel-light', () => { o.ref.light = !o.ref.light; });
+  click('sel-remove', () => removeSelected());
+}
+function removeSelected() {
+  const o = sel();
+  if (!o) return;
+  if (o.kind === 'body') { lab.bodies = lab.bodies.filter(b => b !== o.ref); if (lab.follow === o.ref) setFrame(0, 'Platform'); }
+  if (o.kind === 'event') { lab.events = lab.events.filter(e => e !== o.ref); lab.select = lab.select.filter(n => n !== o.ref.name); }
+  if (o.kind === 'tunnel') lab.tunnels = lab.tunnels.filter(t => t !== o.ref);
+  lab.selected = null; renderRide(); renderSelected(); renderReadings(); draw();
+}
+function intervalText(a, b) {
+  const [ta, xa] = sr.toFrame([a.t, a.x], lab.w), [tb, xb] = sr.toFrame([b.t, b.x], lab.w), dt = tb - ta, dx = xb - xa, s2 = dt * dt - dx * dx;
+  const kind = Math.abs(s2) < 1e-3 ? 'light-like: one light ray joins them' : s2 > 0 ? `time-like: ${fmt(Math.sqrt(s2))} s apart for a traveller at ${fmt(dx / dt)} c, who is at both` :
+    Math.abs(dt) < .005 ? `space-like: at the same moment for you, ${fmt(Math.sqrt(-s2))} ls apart` : `space-like: simultaneous for a frame at ${fmt(dt / dx)} c; no signal links them`;
+  return {dt, dx, s2, kind};
+}
+/** Exact readings in your frame for the selected thing (or a summary of the board). */
+function renderReadings() {
+  const o = sel(), el = $('log');
+  $('log-who').textContent = o ? o.ref.name : 'the board';
+  $('clockface').textContent = `t = ${fmt(lab.T)} s`;
+  $('frame-name').textContent = `riding with ${lab.ride}${lab.ride === 'Custom' ? ` (${fmt(lab.w)} c)` : ''}`;
+  let rows = '';
+  if (!o) {
+    for (const b of lab.bodies) { const p = lab.bodyNow(b); if (p) rows += row(b.name, `${fmt(sr.relativeVelocity(p.leg.u, lab.w))} c · clock ${fmt(p.tau)} s`); }
+    rows += row('Platform clock at x = 0', `${fmt(lab.stationAt(0))} s`);
+  } else if (o.kind === 'body') {
+    const b = o.ref, p = lab.bodyNow(b);
+    if (!p) { el.innerHTML = '<p class="empty">Not on the board at this moment.</p>'; return; }
+    const u = sr.relativeVelocity(p.leg.u, lab.w), g = sr.gamma(u);
+    rows = row('Speed in your frame', `${fmt(u)} c`) + row('γ = 1/√(1 − v²)', fmt(g, 3)) + row('Its clocks run at', `${fmt(1 / g, 3)} of yours`) + row('Its centre clock now', `${fmt(p.tau)} s`);
+    if (!b.ship) rows += row('Length in your frame', `${fmt(b.L0 / g)} ls (its own: ${fmt(b.L0, 1)})`) + row('Front clock behind the back by', `v L₀ = ${fmt(Math.abs(u) * b.L0)} s`);
+    else if (b.turn != null) rows += row('Home clock at this moment', `${fmt(lab.stationAt(b.home))} s`) + row('Ages at the return', `traveller ${fmt(2 * b.turn / sr.gamma(b.speed))} s, home ${fmt(2 * b.turn)} s`);
+  } else if (o.kind === 'event') {
+    const e = o.ref, [tp, xp] = sr.toFrame([e.t, e.x], lab.w);
+    rows = row('In your frame', `t = ${fmt(tp)} s, x = ${fmt(xp)} ls`);
+    for (const other of lab.events) {
+      if (other === e) continue;
+      const iv = intervalText(e, other);
+      rows += row(`to ${other.name}`, `Δt ${fmt(iv.dt)}, Δx ${fmt(iv.dx)}, s² ${fmt(iv.s2)}<br><small>${iv.kind}</small>`);
+    }
+  } else {
+    const tn = o.ref, g = sr.gamma(lab.w);
+    rows = row('Length in your frame', `${fmt((tn.b - tn.a) / g)} ls (its own: ${fmt(tn.b - tn.a, 1)})`) + row('Moving at', `${fmt(-lab.w)} c in your frame`);
+    const doors = lab.events.filter(e => /shuts/.test(e.name));
+    if (doors.length === 2) { const iv = intervalText(doors[0], doors[1]); rows += row('Doors shut', Math.abs(iv.dt) < .01 ? 'at the same moment' : `${fmt(Math.abs(iv.dt))} s apart`); }
+  }
+  el.innerHTML = `<table class="spec readings">${rows}</table>`;
+  const ins = $('insight'); if (ins) ins.innerHTML = lab.route.insight(lab);
   $('scrub').value = lab.T;
-  $('out-lever') && ($('out-lever').textContent = `${f2(lab.w)} c`);
-  const rows = lab.events.map(e => {
-    const [t, x] = sr.toFrame([e.t, e.x], lab.w);
-    return `<tr class="${lab.select.includes(e.name) ? 'sel' : ''}" data-name="${e.name}"><td>${e.name}</td><td>${f2(t)}</td><td>${f2(x)}</td></tr>`;
-  });
-  $('events').innerHTML = rows.join('') || '<tr><td colspan="3">No events yet: use + Flash or + Event.</td></tr>';
-  const [a, b] = lab.select.map(n => lab.eventIn(n));
-  if (a && b) {
-    const dt = b[0] - a[0], dx = b[1] - a[1], s2 = dt * dt - dx * dx;
-    const kind = Math.abs(s2) < 1e-3 ? 'Light-like: one light ray joins them, in every frame.' :
-      s2 > 0 ? `Time-like: a traveller at ${f2(dx / dt)} c relative to you is at both; for it they happen at the same place, ${Math.sqrt(s2).toFixed(2)} s apart.` :
-      (Math.abs(dt) < .005 ? `Space-like: you see them at the same moment, ${Math.sqrt(-s2).toFixed(2)} ls apart. No signal can link them.` : `Space-like: a frame moving at ${f2(dt / dx)} c relative to you sees them at the same moment, ${Math.sqrt(-s2).toFixed(2)} ls apart. No signal can link them.`);
-    $('pair').innerHTML = `${lab.select[0]} → ${lab.select[1]}: Δt <b>${f2(dt)}</b> s, Δx <b>${f2(dx)}</b> ls, s² = Δt² − Δx² = <b>${f2(s2)}</b> in every frame. ${kind}`;
-  } else $('pair').textContent = '';
-  $('insight').innerHTML = lab.route.insight(lab);
 }
 
-// ---------------------------------------------------------------- frames and routes
+// ---------------------------------------------------------------- frames and plates
 let tween = null;
 function setFrame(w, name, animate = true) {
   lab.ride = name; lab.wTarget = w; lab.follow = null;
   const fr = lab.frames().find(x => x.name === name);
   let cx = 0;
-  if (fr?.body) {
-    const p = sr.bodyAtNow(fr.body.legs, w, lab.T);
-    cx = p ? p.xp : 0;
-    lab.follow = fr.body;
-  } else if (name === 'Custom') cx = lab.cx;
+  if (fr?.body) { const p = sr.bodyAtNow(fr.body.legs, w, lab.T); cx = p ? p.xp : 0; lab.follow = fr.body; }
+  else if (name === 'Custom') cx = lab.cx;
   if (!animate) { lab.w = w; lab.cx = cx; tween = null; }
   else tween = {from: sr.rapidity(lab.w), to: sr.rapidity(w), cx0: lab.cx, cx1: cx, t0: performance.now()};
   for (const b of document.querySelectorAll('[data-frame]')) b.classList.toggle('on', b.dataset.frame === name);
   if (name !== 'Custom' && $('lever')) $('lever').value = w;
 }
 function loadRoute(r) {
-  lab.route = r; lab.clear(); lab.T = r.range[0]; lab.w = lab.wTarget = 0; lab.ride = 'Platform'; lab.cx = 0; lab.follow = null; tween = null;
+  lab.route = r; lab.clear(); lab.T = r.range[0]; lab.w = lab.wTarget = 0; lab.ride = 'Platform'; lab.cx = 0; lab.follow = null; tween = null; lab.selected = null;
   r.setup(lab);
+  for (const b of lab.bodies) if (b.ship && b.legs.some(l => l.label === 'out')) { const out = b.legs.find(l => l.label === 'out'), back = b.legs.find(l => l.label === 'back'); Object.assign(b, {speed: out.u, turn: back.t0 - out.t0, start: out.t0, home: out.x0}); }
+  for (const t of lab.tunnels) t.name ??= 'Tunnel';
   if (!lab.select.length) lab.select = lab.events.slice(0, 2).map(e => e.name);
+  const first = lab.select[0] && lab.events.find(e => e.name === lab.select[0]);
+  lab.selected = first ? {kind: 'event', ref: first} : lab.bodies[0] ? {kind: 'body', ref: lab.bodies[0]} : null;
   $('scrub').min = r.range[0]; $('scrub').max = r.range[1];
   setPlaying(true);
-  renderRoute(); renderBoard(); draw();
+  renderPlate(); renderSelected(); renderReadings(); draw();
 }
 
-// ---------------------------------------------------------------- interaction
-function setTool(tool) {
-  lab.tool = tool;
-  for (const b of document.querySelectorAll('[data-tool]')) { b.classList.toggle('on', b.dataset.tool === tool); b.setAttribute('aria-pressed', String(b.dataset.tool === tool)); }
-  $('tool-hint').textContent = HINTS[tool];
-  $('speed-row').hidden = tool !== 'train';
-  figs.diag.canvas.classList.toggle('move', tool === 'move');
-}
+// ---------------------------------------------------------------- hands
 const local = (event, canvas) => { const r = canvas.getBoundingClientRect(); return [event.clientX - r.left, event.clientY - r.top]; };
 function showTip(event, html) {
   const tip = $('tip');
@@ -459,122 +528,137 @@ function showTip(event, html) {
 }
 function nextName(prefix) {
   if (prefix === 'train') { for (const n of 'ABCDEFGHJKLMN') if (!lab.find(n)) return n; return '?'; }
-  let i = 1; while (lab.events.some(e => e.name === `${prefix} ${i}`)) i++;
+  let i = 1; while (lab.events.some(e => e.name === `${prefix} ${i}`) || lab.tunnels.some(t => t.name === `${prefix} ${i}`)) i++;
   return `${prefix} ${i}`;
+}
+function select(o) {
+  lab.selected = o;
+  if (o?.kind === 'event' && !lab.select.includes(o.ref.name)) lab.select = [...lab.select, o.ref.name].slice(-2);
+  renderSelected(); renderReadings(); draw();
 }
 function hitDiag(sx, sy) {
   const fig = figs.diag;
   for (const e of lab.events) { const [t, x] = sr.toFrame([e.t, e.x], lab.w); if (Math.hypot(X(fig, x) - sx, Y(t) - sy) < 11) return {kind: 'event', e, px: X(fig, x), py: Y(t)}; }
   for (const b of lab.bodies) if (b.legs.length === 1 && !b.ship) { const h = handleOf(b); if (h && Math.hypot(h.px - sx, h.py - sy) < 12) return {kind: 'handle', b, ...h}; }
   const t = tOf(sy), x = xOf(fig, sx);
-  for (const b of lab.bodies) {
-    const p = lab.bodyNow(b, 0, t);
-    if (p && Math.abs(X(fig, p.xp) - sx) < 8) return {kind: 'body', b, p, px: X(fig, p.xp), py: sy};
-  }
+  for (const b of lab.bodies) { const p = lab.bodyNow(b, 0, t); if (p && Math.abs(X(fig, p.xp) - sx) < 9) return {kind: 'body', b, p, px: X(fig, p.xp), py: sy}; }
   return {kind: 'space', t, x};
 }
+
 const diag = figs.diag.canvas;
 diag.addEventListener('pointerdown', event => {
-  const [sx, sy] = local(event, diag), hit = hitDiag(sx, sy), fig = figs.diag;
-  const [tS, xS] = sr.fromFrame([tOf(sy), xOf(fig, sx)], lab.w);
+  const [sx, sy] = local(event, diag), hit = hitDiag(sx, sy);
   diag.setPointerCapture(event.pointerId);
-  if (lab.tool === 'move') {
-    if (hit.kind === 'event') drag = {kind: 'event', e: hit.e};
-    else if (hit.kind === 'handle') drag = {kind: 'handle', b: hit.b, pivot: hit.pivot};
-    else { drag = {kind: 'pan', sx, cx: lab.cx}; lab.follow = null; }
-  } else if (lab.tool === 'train') {
-    const u = sr.addVelocities(lab.newV, lab.w), name = nextName('train');
-    lab.addTrain({name, L0: 4, legs: [{t0: tS, x0: xS, u, tau0: 0, forever: true, label: name}]});
-    renderRide();
-  } else if (lab.tool === 'flash' || lab.tool === 'mark') {
-    const name = nextName(lab.tool === 'flash' ? 'Flash' : 'Event');
-    lab.addEvent({name, t: tS, x: xS, light: lab.tool === 'flash'});
-    lab.select = [...lab.select, name].slice(-2);
-  }
-  renderBoard(); draw();
+  if (hit.kind === 'event') { select({kind: 'event', ref: hit.e}); drag = {kind: 'event', e: hit.e}; }
+  else if (hit.kind === 'handle') { select({kind: 'body', ref: hit.b}); drag = {kind: 'handle', b: hit.b, pivot: hit.pivot}; }
+  else if (hit.kind === 'body') select({kind: 'body', ref: hit.b});
+  else { drag = {kind: 'pan', sx, cx: lab.cx}; lab.follow = null; }
 });
 diag.addEventListener('pointermove', event => {
   const [sx, sy] = local(event, diag), fig = figs.diag;
-  if (drag?.kind === 'event') {
-    [drag.e.t, drag.e.x] = sr.fromFrame([tOf(sy), xOf(fig, sx)], lab.w); renderBoard(); draw(); return;
-  }
+  if (drag?.kind === 'event') { [drag.e.t, drag.e.x] = sr.fromFrame([tOf(sy), xOf(fig, sx)], lab.w); renderReadings(); draw(); return; }
   if (drag?.kind === 'handle') {
     const piv = drag.pivot, dtp = Math.max(.5, tOf(sy) - piv.tp);
     const up = Math.max(-.95, Math.min(.95, (xOf(fig, sx) - piv.xp) / dtp)), u = sr.addVelocities(up, lab.w);
     drag.b.legs = sr.chainLegs([{t0: piv.t, x0: piv.x, u, tau0: piv.tau, forever: true, label: drag.b.name}]);
     renderRide(); setFrame(lab.wTarget, lab.ride, false);
-    showTip(event, `<b>${drag.b.name}</b>${f2(up)} c in your frame · ${f2(u)} c on the platform`); draw(); return;
+    showTip(event, `<b>${drag.b.name}</b>${fmt(up)} c in your frame · ${fmt(u)} c on the platform`); renderReadings(); draw(); return;
   }
   if (drag?.kind === 'pan') { lab.cx = drag.cx - (sx - drag.sx) / scale(); draw(); return; }
   const hit = hitDiag(sx, sy);
   hover = null;
-  if (hit.kind === 'event') {
-    const [t, x] = sr.toFrame([hit.e.t, hit.e.x], lab.w);
-    hover = {tip: true, px: hit.px, py: hit.py};
-    showTip(event, `<b>${hit.e.name}</b>your frame: t = ${f2(t)} s, x = ${f2(x)} ls<br>platform: t = ${f2(hit.e.t)} s, x = ${f2(hit.e.x)} ls`);
-  } else if (hit.kind === 'handle') showTip(event, `<b>${hit.b.name}: speed handle</b>Drag sideways to change its speed. Its clocks carry on from now.`);
-  else if (hit.kind === 'body') showTip(event, `<b>${hit.b.name}</b>its own clock reads ${hit.p.tau.toFixed(2)} s here<br>moving at ${f2(sr.relativeVelocity(hit.p.leg.u, lab.w))} c in your frame`);
-  else {
-    const s2 = hit.t * hit.t - hit.x * hit.x;
-    showTip(event, `<b>t = ${f2(hit.t)} s, x = ${f2(hit.x)} ls</b>${Math.abs(s2) < .3 ? 'On the light cone of the origin.' : s2 > 0 ? `${hit.t > 0 ? 'In the future' : 'In the past'} of the origin: s² = ${f2(s2)} in every frame.` : `Elsewhere: no signal from the origin can reach here. s² = ${f2(s2)}.`}`);
-  }
+  if (hit.kind === 'event') { const [t, x] = sr.toFrame([hit.e.t, hit.e.x], lab.w); hover = {tip: true, px: hit.px, py: hit.py}; showTip(event, `<b>${hit.e.name}</b>your frame: t = ${fmt(t)} s, x = ${fmt(x)} ls<br>platform: t = ${fmt(hit.e.t)} s, x = ${fmt(hit.e.x)} ls`); }
+  else if (hit.kind === 'handle') showTip(event, `<b>${hit.b.name}: speed handle</b>Drag sideways to change its speed. Its clocks carry on from now.`);
+  else if (hit.kind === 'body') showTip(event, `<b>${hit.b.name}</b>its own clock reads ${hit.p.tau.toFixed(2)} s here<br>moving at ${fmt(sr.relativeVelocity(hit.p.leg.u, lab.w))} c in your frame`);
+  else { const s2 = hit.t * hit.t - hit.x * hit.x; showTip(event, `<b>t = ${fmt(hit.t)} s, x = ${fmt(hit.x)} ls</b>${Math.abs(s2) < .3 ? 'On the light cone of the origin.' : s2 > 0 ? `${hit.t > 0 ? 'In the future' : 'In the past'} of the origin: s² = ${fmt(s2)} in every frame.` : `Elsewhere: no signal from the origin can reach here. s² = ${fmt(s2)}.`}`); }
   if (!lab.playing) draw();
 });
-const endDrag = () => { drag = null; };
+const endDrag = () => { if (drag && drag.kind !== 'pan') renderSelected(); drag = null; };
 diag.addEventListener('pointerup', endDrag);
 diag.addEventListener('pointercancel', endDrag);
 diag.addEventListener('pointerleave', () => { hover = null; showTip(null); });
 
 const track = figs.track.canvas;
+function hitTrack(sx, sy) {
+  const fig = figs.track;
+  for (const b of lab.bodies) {
+    const p = lab.bodyNow(b, 0);
+    if (!p) continue;
+    const half = (b.ship ? 1 : b.L0 / 2) / sr.gamma(sr.relativeVelocity(p.leg.u, lab.w)) * scale() + 8;
+    if (Math.abs(X(fig, p.xp) - sx) < half && sy > TRACK.roof - 34 && sy < TRACK.floor + 4) return {kind: 'body', b, p};
+  }
+  for (const tn of lab.tunnels) {
+    const at = xs => X(fig, sr.toFrame(sr.lineMeetsNow(0, xs, 0, lab.w, lab.T), lab.w)[1]);
+    if (sx > at(tn.a) && sx < at(tn.b) && sy < TRACK.rail) return {kind: 'tunnel', tn};
+  }
+  return null;
+}
+track.addEventListener('pointerdown', event => {
+  const [sx, sy] = local(event, track), h = hitTrack(sx, sy);
+  if (!h) return;
+  track.setPointerCapture(event.pointerId);
+  select(h.kind === 'body' ? {kind: 'body', ref: h.b} : {kind: 'tunnel', ref: h.tn});
+  drag = {kind: 'slide', o: h.kind === 'body' ? h.b : h.tn, tunnel: h.kind === 'tunnel', sx};
+});
 track.addEventListener('pointermove', event => {
   const [sx, sy] = local(event, track), fig = figs.track;
+  if (drag?.kind === 'slide') {
+    // Slide along the track in your frame: a shift of d in x′ at fixed t′.
+    const d = (sx - drag.sx) / scale(), [dt, dx] = sr.fromFrame([0, d], lab.w); drag.sx = sx;
+    if (drag.tunnel) { drag.o.a += dx; drag.o.b += dx; }
+    else drag.o.legs = sr.chainLegs(drag.o.legs.map(l => ({...l, t0: l.t0 + dt, x0: l.x0 + dx})));
+    renderReadings(); draw(); return;
+  }
   if (sy > TRACK.clocks - 14) {
     const xs = Math.round(sr.fromFrame([lab.T, xOf(fig, sx)], lab.w)[1] / 2) * 2;
     if (Math.abs(xs) <= 10) return showTip(event, `<b>Platform clock at x = ${xs} ls</b>reads ${lab.stationAt(xs).toFixed(2)} s at this moment of your frame.${Math.abs(lab.w) > 1e-3 ? ' The platform clocks are synchronised for the platform, so to you they are out of step.' : ''}`);
   }
-  for (const b of lab.bodies) {
-    const p = lab.bodyNow(b, 0);
-    if (!p) continue;
-    const half = b.L0 / 2 / sr.gamma(sr.relativeVelocity(p.leg.u, lab.w)) * scale() + 8;
-    if (Math.abs(X(fig, p.xp) - sx) < half && sy > TRACK.roof - 30 && sy < TRACK.floor + 4) {
-      const u = sr.relativeVelocity(p.leg.u, lab.w);
-      return showTip(event, `<b>${b.name}</b>${b.L0} ls long in its own frame, ${(b.L0 / sr.gamma(u)).toFixed(2)} ls in yours<br>moving at ${f2(u)} c; its clocks run at ${(1 / sr.gamma(u)).toFixed(3)} of yours`);
-    }
-  }
+  const h = hitTrack(sx, sy);
+  track.style.cursor = h ? 'grab' : 'default';
+  if (h?.kind === 'body') { const u = sr.relativeVelocity(h.p.leg.u, lab.w); return showTip(event, `<b>${h.b.name}</b>${h.b.ship ? '' : `${h.b.L0} ls long in its own frame, ${(h.b.L0 / sr.gamma(u)).toFixed(2)} ls in yours<br>`}moving at ${fmt(u)} c; its clocks run at ${(1 / sr.gamma(u)).toFixed(3)} of yours. Drag to slide it.`); }
+  if (h?.kind === 'tunnel') return showTip(event, `<b>${h.tn.name}</b>At rest on the platform. Drag to slide it.`);
   showTip(null);
 });
+track.addEventListener('pointerup', endDrag);
+track.addEventListener('pointercancel', endDrag);
 track.addEventListener('pointerleave', () => showTip(null));
 
-$('events').addEventListener('click', event => {
-  const row = event.target.closest('[data-name]');
-  if (!row) return;
-  const n = row.dataset.name;
-  lab.select = lab.select.includes(n) ? lab.select.filter(x => x !== n) : [...lab.select, n].slice(-2);
-  renderBoard(); draw();
+document.querySelector('.tray').addEventListener('click', event => {
+  const b = event.target.closest('[data-add]');
+  if (!b) return;
+  const kind = b.dataset.add, here = sr.fromFrame([lab.T, lab.cx], lab.w);
+  let o;
+  if (kind === 'train') {
+    const name = nextName('train'), u = sr.addVelocities(.5, lab.w);
+    const body = lab.addTrain({name, L0: 4, legs: [{t0: here[0], x0: here[1] - 6 * Math.sign(u || 1), u, tau0: 0, forever: true, label: name}]});
+    o = {kind: 'body', ref: body};
+  } else if (kind === 'traveller') {
+    const name = nextName('train'), body = lab.addTrain({name, L0: 1.2, ship: true, legs: [{t0: 0, x0: 0, u: 0, tau0: 0, forever: true, label: 'at home'}]});
+    Object.assign(body, {speed: .8, turn: 5, start: here[0], home: here[1]}); body.legs = travellerLegs(body);
+    o = {kind: 'body', ref: body};
+  } else if (kind === 'tunnel') {
+    const tn = {name: nextName('Tunnel'), a: here[1] - 3, b: here[1] + 3}; lab.addTunnel(tn); o = {kind: 'tunnel', ref: tn};
+  } else {
+    const [t, x] = sr.fromFrame([lab.T + (kind === 'flash' ? 1 : 2), lab.cx + (kind === 'flash' ? 0 : 2)], lab.w), name = nextName(kind === 'flash' ? 'Flash' : 'Event');
+    lab.addEvent({name, t, x, light: kind === 'flash'}); o = {kind: 'event', ref: lab.events.at(-1)};
+  }
+  renderRide(); select(o);
 });
 $('ride').addEventListener('click', event => {
   const b = event.target.closest('[data-frame]');
   if (!b) return;
   const fr = lab.frames().find(x => x.name === b.dataset.frame);
-  setFrame(fr.w, fr.name);
+  setFrame(fr.w, fr.name); renderReadings();
 });
-$('routes').addEventListener('click', event => { const b = event.target.closest('[data-id]'); if (b) loadRoute(routes.find(r => r.id === b.dataset.id)); });
-$('tools').addEventListener('click', event => { const b = event.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
-$('new-v').oninput = event => { lab.newV = +event.target.value; $('out-v').textContent = `${f2(lab.newV)} c`; };
-$('scrub').oninput = event => { lab.T = +event.target.value; setPlaying(false); renderBoard(); draw(); };
+$('plates').addEventListener('click', event => { const b = event.target.closest('[data-id]'); if (b) loadRoute(routes.find(r => r.id === b.dataset.id)); });
+$('scrub').oninput = event => { lab.T = +event.target.value; setPlaying(false); renderReadings(); draw(); };
 $('restart').onclick = () => loadRoute(lab.route);
-$('clear').onclick = () => { lab.clear(); setFrame(0, 'Platform', false); renderRide(); renderBoard(); draw(); };
-$('t-nows').onclick = event => { lab.show.nows = !lab.show.nows; event.currentTarget.setAttribute('aria-pressed', lab.show.nows); draw(); };
-$('t-hyper').onclick = event => { lab.show.hyper = !lab.show.hyper; event.currentTarget.setAttribute('aria-pressed', lab.show.hyper); draw(); };
-for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => {
-  lab.speed = +b.dataset.speed;
-  for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b);
-};
-const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
-const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
+const toggle = (id, key) => { $(id).onclick = () => { lab.show[key] = !lab.show[key]; $(id).classList.toggle('on', lab.show[key]); $(id).setAttribute('aria-pressed', String(lab.show[key])); draw(); }; };
+toggle('t-nows', 'nows'); toggle('t-hyper', 'hyper');
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => { lab.speed = +b.dataset.speed; for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b); };
 function setPlaying(on) {
   if (on && lab.route && lab.T >= lab.route.range[1] - 1e-6) lab.T = lab.route.range[0];
-  lab.playing = on; $('play').innerHTML = on ? ICON_PAUSE : ICON_PLAY; $('play').setAttribute('aria-label', on ? 'Pause' : 'Play');
+  lab.playing = on; $('play').textContent = on ? 'Pause' : 'Play';
 }
 $('play').onclick = () => setPlaying(!lab.playing);
 const notes = $('notes');
@@ -585,11 +669,10 @@ addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, dialog[open]')) return;
   if (event.key === ' ') { event.preventDefault(); setPlaying(!lab.playing); }
   else if (event.key === 'r' || event.key === 'R') loadRoute(lab.route);
+  else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeSelected(); }
+  else if (event.key === 'Escape') select(null);
   else if (/^[1-7]$/.test(event.key)) loadRoute(routes[+event.key - 1]);
-  else if (event.key === 'f' || event.key === 'F') {
-    const list = lab.frames(), i = list.findIndex(x => x.name === lab.ride), fr = list[(i + 1) % list.length];
-    setFrame(fr.w, fr.name);
-  }
+  else if (event.key === 'f' || event.key === 'F') { const list = lab.frames(), i = list.findIndex(x => x.name === lab.ride), fr = list[(i + 1) % list.length]; setFrame(fr.w, fr.name); renderReadings(); }
 });
 
 // ---------------------------------------------------------------- loop
@@ -601,29 +684,21 @@ function frame(now) {
     lab.w = Math.tanh(tween.from + (tween.to - tween.from) * e);
     lab.cx = tween.cx0 + (tween.cx1 - tween.cx0) * e;
     if (u >= 1) tween = null;
-  } else if (lab.follow) {
-    const p = lab.bodyNow(lab.follow);
-    if (p) lab.cx = p.xp;
-  }
-  if (lab.playing) {
-    lab.T += dt * lab.speed;
-    if (lab.T >= lab.route.range[1]) { lab.T = lab.route.range[1]; setPlaying(false); }
-  }
+  } else if (lab.follow) { const p = lab.bodyNow(lab.follow); if (p) lab.cx = p.xp; }
+  if (lab.playing) { lab.T += dt * lab.speed; if (lab.T >= lab.route.range[1]) { lab.T = lab.route.range[1]; setPlaying(false); } }
   draw();
-  if (now - lastBoard > 120) { lastBoard = now; renderBoard(); }
+  if (now - lastBoard > 200) { lastBoard = now; renderReadings(); }
   requestAnimationFrame(frame);
 }
-setTool('move');
 loadRoute(routes[0]);
 requestAnimationFrame(frame);
 
 if (new URLSearchParams(location.search).has('debug')) {
   window.__sr = {
-    lab, routes,
+    lab, routes, select,
     load: id => loadRoute(routes.find(r => r.id === id)),
-    at: T => { lab.T = T; setPlaying(false); renderBoard(); draw(); return T; },
-    ride: name => { const fr = lab.frames().find(x => x.name === name); setFrame(fr.w, fr.name, false); renderBoard(); draw(); return fr; },
-    snap: () => ({T: lab.T, w: lab.w, ride: lab.ride, insight: $('insight').textContent, pair: $('pair').textContent,
-      bodies: lab.bodies.map(b => { const p = lab.bodyNow(b); return p && {name: b.name, xp: +p.xp.toFixed(3), tau: +p.tau.toFixed(3)}; })}),
+    at: T => { lab.T = T; setPlaying(false); renderReadings(); draw(); return T; },
+    ride: name => { const fr = lab.frames().find(x => x.name === name); setFrame(fr.w, fr.name, false); renderReadings(); draw(); return fr; },
+    snap: () => ({T: lab.T, w: lab.w, ride: lab.ride, insight: $('insight')?.textContent, log: $('log').textContent.slice(0, 300)}),
   };
 }

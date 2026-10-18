@@ -3,101 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#262b12">
-<meta name="description" content="The relativity railway: ride any train and watch clocks, lengths and simultaneity change. Light clocks, the tunnel paradox, the twins and velocity addition, with exact Lorentz transformations.">
+<meta name="theme-color" content="#ece4d2">
+<meta name="description" content="A relativity drawing board: trains, travellers, flashes and events on a track and a spacetime diagram. Ride with anything and read exact lengths, clock rates and intervals.">
 <title>Special Relativity · Theoria</title>
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Special Relativity · Theoria">
-<meta property="og:description" content="The relativity railway: ride any train and watch clocks, lengths and simultaneity change, with exact Lorentz transformations.">
+<meta property="og:description" content="Ride with any train and read exact lengths, clock rates and intervals, with exact Lorentz transformations.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="rail.css">
+<link rel="stylesheet" href="board.css">
 </head>
 <body>
-<main class="rail" aria-label="The relativity railway">
-  <header class="board">
-    <a class="brand" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Special relativity · the relativity railway</span></a>
-    <div class="readout"><small>Riding with</small><span class="flaps" id="flap-frame" aria-live="polite"></span></div>
-    <div class="readout"><small>Time on your clocks</small><span class="flaps" id="flap-time"></span></div>
-    <button id="play" class="bbtn play" aria-label="Pause"></button>
-    <div class="bgroup" role="group" aria-label="Simulation speed">
-      <button class="bbtn" data-speed="0.5">½×</button>
-      <button class="bbtn on" data-speed="1.5">1×</button>
-      <button class="bbtn" data-speed="4">3×</button>
+<main class="desk" aria-label="Relativity drawing board">
+  <header class="top">
+    <a class="mark" href="../" aria-label="Theoria home"><b>THEORIA</b><span>Special relativity · drawing board</span></a>
+    <div class="ride" id="ride" role="group" aria-label="Ride with"></div>
+    <span class="clockface" id="clockface" title="Time on your clocks">t = 0.00 s</span>
+    <button class="tab on" id="t-nows" aria-pressed="true">Other “nows”</button>
+    <button class="tab on" id="t-hyper" aria-pressed="true">Invariant curves</button>
+    <button class="tab" id="play">Pause</button>
+    <div class="group" role="group" aria-label="Speed">
+      <button class="tab" data-speed="0.5">½×</button><button class="tab on" data-speed="1.5">1×</button><button class="tab" data-speed="4">3×</button>
     </div>
-    <button id="restart" class="bbtn">Restart</button>
-    <button id="about" class="bbtn" aria-label="What is calculated, and how" title="The physics">i</button>
+    <button class="tab" id="restart">Restart</button>
+    <button class="tab" id="about" aria-label="What is calculated, and how" title="The physics">i</button>
     <a class="next wide-only" href="../light/">Next: Light as a wave →</a>
   </header>
 
-  <section id="track" aria-label="The track, seen from the frame you ride with">
-    <div class="panel-head"><span class="sign">The line</span>
-      <p>Everything at one moment of <b>your</b> time. The rails and station clocks belong to the platform; each train carries its own clocks, synchronised in its own frame.</p></div>
-    <div class="ride" id="ride"><span>Ride with</span></div>
-    <canvas id="c-track" aria-label="The track: platform, trains, clocks and light at the present moment"></canvas>
-  </section>
-
-  <section id="diag" aria-label="Spacetime diagram">
-    <div class="panel-head"><span class="sign">Timetable of spacetime</span>
-      <p>Distance across, your time up. Light always climbs at 45°. Each moment of the line above is one horizontal slice: the dashed <b>now</b>.</p>
-      <div class="toggles">
-        <button class="btn" id="t-nows" aria-pressed="true">Other frames’ “now”</button>
-        <button class="btn" id="t-hyper" aria-pressed="true">Invariant curves</button>
-      </div></div>
-    <div class="canvas-wrap"><canvas id="c-diag" aria-label="Spacetime diagram of the trains, light and events"></canvas></div>
+  <section class="bench" aria-label="The drawing board">
+    <div class="frame board">
+      <canvas id="c-track" aria-label="The track at this moment of your time: platform, trains, clocks and light"></canvas>
+      <canvas id="c-diag" aria-label="Spacetime diagram: distance across, your time up"></canvas>
+    </div>
     <label class="scrub"><span>Your time</span><input id="scrub" type="range" min="0" max="20" step="0.01" aria-label="Time in the frame you ride with"></label>
   </section>
 
-  <aside class="side" aria-label="Routes, events and tools">
-    <div>
-      <p class="label">Routes</p>
-      <div class="routes" id="routes"></div>
+  <section class="tray" aria-label="Parts tray: click to add to the board">
+    <span class="letter">Parts</span>
+    <button class="part" data-add="train"><svg viewBox="0 0 52 34"><rect x="4" y="9" width="40" height="15" fill="#f4eee0" stroke="#c8541f" stroke-width="2"/><path d="M44 9Q50 9 50 17V24H44" fill="#f4eee0" stroke="#c8541f" stroke-width="2"/><rect x="9" y="12" width="6" height="4" fill="#c9c9a3"/><rect x="19" y="12" width="6" height="4" fill="#c9c9a3"/><rect x="29" y="12" width="6" height="4" fill="#c9c9a3"/><path d="M2 28H50" stroke="#2f3614" stroke-width="2"/></svg><small>Train</small></button>
+    <button class="part" data-add="traveller"><svg viewBox="0 0 52 34"><path d="M8 30L26 6L44 30" fill="none" stroke="#56612a" stroke-width="2"/><circle cx="26" cy="6" r="3" fill="#2f3614"/><path d="M8 30V4" stroke="#2f3614" stroke-dasharray="2 3"/></svg><small>Traveller</small></button>
+    <button class="part" data-add="flash"><svg viewBox="0 0 52 34"><path d="M26 28L10 8M26 28L42 8" stroke="#c8541f" stroke-width="2"/><circle cx="26" cy="28" r="4" fill="#c8541f"/></svg><small>Flash</small></button>
+    <button class="part" data-add="event"><svg viewBox="0 0 52 34"><circle cx="26" cy="17" r="5" fill="#2f3614"/><path d="M14 17H38M26 5V29" stroke="#8a8c68" stroke-dasharray="2 3"/></svg><small>Event</small></button>
+    <button class="part" data-add="tunnel"><svg viewBox="0 0 52 34"><path d="M6 30V10H46V30" fill="rgba(47,54,20,.08)" stroke="#2f3614" stroke-width="2.5"/><path d="M2 30H50" stroke="#2f3614" stroke-width="2"/></svg><small>Tunnel</small></button>
+  </section>
+
+  <aside class="sheet" aria-label="Specification sheet">
+    <div class="block">
+      <p class="letter"><span>Plates</span><span id="frame-name"></span></p>
+      <div class="plates" id="plates"></div>
     </div>
-    <div class="ticket" id="ticket" aria-live="polite"></div>
-    <div class="insight" id="insight" aria-live="polite"></div>
-    <div class="departures">
-      <p class="label">Events, in your frame</p>
-      <table><thead><tr><th>Event</th><th>t (s)</th><th>x (ls)</th></tr></thead><tbody id="events"></tbody></table>
-      <p class="pair" id="pair"></p>
-      <p class="hint">Tap two events to compare them. Change trains and watch which numbers change.</p>
-    </div>
-    <div class="bench">
-      <p class="label">Tools · in the spacetime diagram</p>
-      <div class="tools" id="tools">
-        <button class="btn on" data-tool="move" aria-pressed="true">Move</button>
-        <button class="btn" data-tool="train" aria-pressed="false">+ Train</button>
-        <button class="btn" data-tool="flash" aria-pressed="false">+ Flash</button>
-        <button class="btn" data-tool="mark" aria-pressed="false">+ Event</button>
-      </div>
-      <p class="tool-hint" id="tool-hint"></p>
-      <label class="slider" id="speed-row" hidden><span>New train’s speed (in your frame) <output id="out-v">0.60 c</output></span>
-        <input id="new-v" type="range" min="-0.95" max="0.95" step="0.05" value="0.6"></label>
-      <button class="btn" id="clear" style="margin-top:10px">Clear the line</button>
+    <div class="block note" id="note" aria-live="polite"></div>
+    <div class="block" id="selected"></div>
+    <div class="block">
+      <p class="letter"><span>Readings · in your frame</span><span id="log-who"></span></p>
+      <div id="log"></div>
     </div>
   </aside>
 </main>
 <div class="tip" id="tip" role="status"></div>
 
 <dialog class="about" id="notes" aria-labelledby="notes-heading">
-  <button class="bbtn close btn" aria-label="Close">×</button>
-  <p class="label">Behind the timetable</p>
+  <button class="tab close" aria-label="Close">×</button>
+  <p class="letter">Notes on the board</p>
   <h2 id="notes-heading">What is calculated, and what is drawn.</h2>
-  <p>Times are in seconds and distances in light-seconds (ls), so light moves 1 ls per second and every light ray in the diagram climbs at 45°. Speeds are fractions of the speed of light, c.</p>
-  <p>Every position, time and clock reading comes from the Lorentz transformation between the platform frame and the frame you ride with:</p>
+  <p>Times are in seconds and distances in light-seconds (ls), so light moves 1 ls per second and every light ray in the diagram climbs at 45°. Speeds are fractions of the speed of light, c. Every position, time and clock reading comes from the Lorentz transformation between the platform and the frame you ride with.</p>
   <span class="eq">t′ = γ (t − v x),  x′ = γ (x − v t),  γ = 1/√(1 − v²)</span>
-  <h3>Clocks and simultaneity</h3>
-  <p>Each train’s clocks are synchronised in that train’s own frame, by Einstein’s convention (light signals take equal times both ways). Seen from another frame, a moving train’s clocks run slow by γ and are out of step along its length: the clock at the front lags the one at the back by v L₀, where L₀ is the train’s own length. That is why the same pair of events can be simultaneous for one train and not for another.</p>
-  <h3>Lengths</h3>
-  <p>A moving train is shorter by γ, because measuring its length means marking both ends at the same moment, and “the same moment” differs between frames. Nothing is squeezed: in its own frame the train is always L₀ long.</p>
+  <h3>The board</h3>
+  <p>The top strip is everything at one moment of <b>your</b> time: the rails and platform clocks belong to the platform; each train carries its own clocks, synchronised in its own frame. Below, the spacetime diagram shows the whole history, distance across and your time up; the dashed orange line is now, the moment shown in the strip.</p>
+  <h3>Clocks, lengths and “now”</h3>
+  <p>Seen from another frame, a moving train’s clocks run slow by γ and are out of step along its length: the front clock lags the back one by v L₀. A moving train is shorter by γ, because measuring a length means marking both ends at the same moment, and “the same moment” differs between frames; the dashed coloured lines are each train’s own “now”.</p>
   <h3>Invariants</h3>
-  <p>The interval s² = Δt² − Δx² between two events is the same in every frame. The curves t² − x² = constant are drawn in the diagram; they do not move when you change trains, while everything else slides along them.</p>
-  <h3>The twins</h3>
-  <p>The traveller turns round instantly. Riding with it, its “now” line swings at the turn, and the home clock’s reading on that line jumps forward: that is where the extra years of the stay-at-home twin are found.</p>
-  <h3>Keys</h3>
-  <p>Space pause · R restart · 1–7 routes · F next frame.</p>
-  <p class="honest">Drawn for clarity: the height of the trains, the clock faces and the speed of play. Trains are rigid and move in straight lines (the traveller’s turn is instant), and nothing here includes gravity or the travel time of light to your eye: what is shown is what each frame measures, not what a camera would see.</p>
+  <p>The interval s² = Δt² − Δx² between two events is the same in every frame. The dotted curves t² − x² = constant do not move when you change frames; everything else slides along them.</p>
+  <h3>Hands and keys</h3>
+  <p>Click a train, traveller, tunnel or event to select it; drag events in the diagram, drag trains and tunnels along the track, and drag a train’s round handle in the diagram to change its speed. Drag empty diagram to pan. Space pause · F next frame · Delete removes · 1–7 plates.</p>
+  <p class="honest">Drawn for clarity: train heights, clock faces and the speed of play. Trains are rigid and move in straight lines (the traveller’s turn is instant); what is shown is what each frame measures, not what a camera would see, since light takes time to reach an eye.</p>
   <p>Further reading: Taylor &amp; Wheeler, <em>Spacetime Physics</em> · <a href="https://www.feynmanlectures.caltech.edu/I_15.html" target="_blank" rel="noopener">Feynman Lectures, Volume I, chapter 15</a></p>
-  <p class="label" style="margin-top:12px">Theoria · Special relativity 0.4 · The relativity railway</p>
+  <p class="letter" style="margin-top:12px">Theoria · Special relativity 0.5 · Drawing board</p>
 </dialog>
 <script type="module" src="app.js"></script>
 </body>
