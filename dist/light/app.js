@@ -1,702 +1,457 @@
-// Light as a wave: a live Maxwell solver drawn as a glowing surface whose height is the electric field.
-import * as THREE from 'three';
-import {createStage, spectrumColor, INK} from '../shared/stage.js';
-import {$, toast, setPressed, reducedMotion, createStory, bindDialog, positionLabel, bindKeys, showTip} from '../shared/shell.js';
+// Light as a wave: the wave tank. A live 2D Maxwell (FDTD) solver drawn as a ripple tank, with paintable glass and
+// metal, movable sources, two probes on an oscilloscope and a detector screen.
 import * as em from './physics.js';
-import {steps} from './story.js';
+import {experiments} from './scenarios.js';
 
-const N = 220;             // grid cells per side
-const BORDER = 24;         // absorbing border, hidden
-const CELL = .1;           // world size of one cell
-const W = N * CELL;        // world size of the grid
-const RAIL = 2.4;          // height of the arrow rail above the surface
-const ARROWS = 26;         // number of E/B arrow pairs
-// Paper palette: crests burnt orange, troughs olive; E orange, B dark ink; glass an orange tint, metal dark ink.
-const COLOR = {e: INK.spot, b: INK.dark, glass: INK.spot, metal: INK.dark};
-const RATES = [.5, 1, 2, 3];
-// The grid is given a real scale: 25 nm per cell, so the waves are visible light (everything scales, see the notes).
-const NM_PER_CELL = 25, C_NM_THZ = 299792.458;   // c in nm × THz
-const lambdaNm = () => C_NM_THZ / settings.freq;
-const PARAM = {
-  slits: {name: 'Slit gap', min: 24, max: 80, step: 2, key: 'gap', format: v => `${(v * NM_PER_CELL / 1000).toFixed(2)} µm`},
-  lens: {name: 'Glass n', min: 1.2, max: 2.4, step: .05, key: 'n', format: v => v.toFixed(2)},
+const $ = id => document.getElementById(id);
+const N = 200, B = 24, V = N - 2 * B, NM = 25;      // grid, absorbing border, visible cells, nm per cell
+const RGB = {paper: [236, 228, 210], spot: [200, 84, 31], olive: [86, 97, 42], ink: [47, 54, 20], tint: [201, 201, 163], deep: [102, 41, 15], pale: [233, 185, 154]};
+const C = {ink: '#2f3614', ink3: '#6a6f45', spot: '#c8541f', olive: '#56612a', paper2: '#f4eee0', trace: '#f0a35e', traceB: '#c9d27a'};
+const HINTS = {
+  move: 'Drag a source, probe A or B, or the screen. Hover over anything for its numbers.',
+  glass: 'Paint glass into the tank. Set its index n below first; light in it moves at c/n.',
+  metal: 'Paint metal: a perfect mirror. Light cannot get in.',
+  erase: 'Rub out glass and metal, back to empty space.',
+  source: 'Click to add an antenna (up to four). All are driven by the signal generator, in step.',
+  ripple: 'Click to set off a single short ripple there.',
+  screen: 'Click to place the detector screen at that distance. It records brightness across the tank.',
 };
-
-const settings = {experiment: 'antenna', freq: 600, lambda: 20, gap: 44, n: 1.5, rate: 1};
-/** Frequency in THz sets the wavelength on the grid (in cells). */
-function setFrequency(f) { settings.freq = f; settings.lambda = C_NM_THZ / (f * NM_PER_CELL); }
-setFrequency(settings.freq);
-const layers = {arrows: false, intensity: false, ruler: false};
-const narrow = () => innerWidth <= 720;
-let heightOn = 1, targetHeight = 1, intensityMix = 0, playing = !reducedMotion, stepDebt = 0;
-
-// ---------------------------------------------------------------- stage
-const stage = createStage({
-  canvas: $('scene'), fallback: $('fallback'), theme: 'paper',
-  viewShift: () => {
-    if (!narrow()) return [24, 0];
-    const top = $('story').getBoundingClientRect().bottom;
-    const below = [$('readout'), $('transport')].find(el => el.offsetParent);
-    return [0, Math.round((top + below.getBoundingClientRect().top) / 2 - innerHeight / 2)];
-  },
-});
-const {scene, camera, controls} = stage;
-Object.assign(controls, {minDistance: 6, maxDistance: 110, maxPolarAngle: Math.PI * .47});
-const group = {base: new THREE.Group(), props: new THREE.Group(), arrows: new THREE.Group(), source: new THREE.Group(), screen: new THREE.Group(), ruler: new THREE.Group()};
-for (const g of Object.values(group)) scene.add(g);
-
-const cellToWorld = (i, j) => [(i + .5) * CELL - W / 2, (W / 2) - (j + .5) * CELL];
-const worldToCell = (x, z) => [(x + W / 2) / CELL - .5, (W / 2 - z) / CELL - .5];
 
 // ---------------------------------------------------------------- simulation
-const field = em.createField({nx: N, ny: N, border: BORDER});
-const avgI = new Float32Array(N * N);
-let scale = 1e-3, iScale = 1e-6, cy = N / 2;
-let probe = {i0: 0, i1: 0, j: N / 2};
-let lens = null;          // {x0, t, a, R} in cells, when the lens is in place
-const WALL = {i: 80, width: 4, slit: 6};
+const field = em.createField({nx: N, ny: N, border: B});
+const bright = new Float32Array(N * N);
+const HIST = 1200, hist = {A: new Float32Array(HIST), B: new Float32Array(HIST), n: 0};
 
-function materialFor(name) {
-  if (name === 'slits') {
-    const {i, width, slit} = WALL, s1 = cy - settings.gap / 2, s2 = cy + settings.gap / 2;
-    return (x, y) => ({metal: x >= i && x < i + width && Math.abs(y - s1) > slit / 2 && Math.abs(y - s2) > slit / 2});
-  }
-  if (name === 'lens') {
-    const {x0, t, R} = lens;
-    const c1 = x0 + R - t / 2, c2 = x0 - R + t / 2;
-    return (x, y) => ((x - c1) ** 2 + (y - cy) ** 2 <= R * R && (x - c2) ** 2 + (y - cy) ** 2 <= R * R) ? {eps: settings.n ** 2} : null;
-  }
-  return () => null;
-}
-
-function setSources() {
-  const omega = em.omegaFor(settings.lambda);
-  // Same experiment, new frequency: retune the running source smoothly instead of replacing it.
-  const running = field.sources.find(s => s.kind === (settings.experiment === 'antenna' ? 'point' : 'line'));
-  if (running) { running.retune(omega); return; }
-  const pulses = field.sources.filter(s => s.kind === 'pulse');
-  field.sources.length = 0;
-  if (settings.experiment === 'antenna') field.sources.push(em.pointSource(N / 2, N / 2, {omega, amp: 6}));
-  else field.sources.push(em.lineSource(BORDER + 6, {omega, amp: 1}));
-  field.sources.push(...pulses);
-}
-
-function setupExperiment(restart = true) {
-  const name = settings.experiment;
-  lens = name === 'lens' ? (() => { const t = 40, a = 50; return {x0: 96, t, a, R: (a * a + t * t / 4) / t}; })() : null;
-  if (restart) { field.clear(); avgI.fill(0); field.sources.length = 0; }
-  field.setMaterial(materialFor(name));
-  setSources();
-  const start = {antenna: N / 2 + 4, plane: BORDER + 14, slits: WALL.i + 10, lens: BORDER + 14}[name];
-  probe = {i0: start, i1: N - BORDER - 6, j: N / 2};
-  buildProps();
-  updateControls();
-}
-
-// ---------------------------------------------------------------- the field surface
-const texture = new THREE.DataTexture(new Uint8Array(N * N * 4), N, N, THREE.RGBAFormat);
-texture.magFilter = texture.minFilter = THREE.LinearFilter;
-const surfaceGeometry = new THREE.PlaneGeometry(W - CELL, W - CELL, N - 1, N - 1);
-surfaceGeometry.rotateX(-Math.PI / 2);
-{
-  // Put each vertex's uv exactly on its cell centre.
-  const p = surfaceGeometry.attributes.position, uv = surfaceGeometry.attributes.uv;
-  for (let k = 0; k < p.count; k++) uv.setXY(k, (p.getX(k) + W / 2) / W, (W / 2 - p.getZ(k)) / W);
-}
-const surfaceMaterial = new THREE.ShaderMaterial({
-  transparent: true, side: THREE.DoubleSide,
-  uniforms: {
-    map: {value: texture}, texel: {value: 1 / N}, cell: {value: CELL}, heightScale: {value: 1.15},
-    mode: {value: 0}, edge: {value: (BORDER + 2) / N}, fade: {value: 8 / N},
-    light: {value: new THREE.Vector3(.4, 1, .55).normalize()},
+const lab = {
+  exp: null, freq: 600, lines: true, speed: .5, playing: true, tool: 'move', brush: 8, n: 1.5, sourcesOn: true,
+  sources: [], probes: {A: {i: 118, j: 100}, B: {i: 148, j: 100}}, screen: null,
+  lambdaCells() { return em.nmForTHz(this.freq) / NM; },
+  lambdaNm() { return em.nmForTHz(this.freq); },
+  omega() { return em.omegaFor(this.lambdaCells()); },
+  point(i, j) {
+    if (this.sources.filter(s => s.kind === 'point').length >= 4) return;
+    const s = em.pointSource(i, j, {omega: this.omega(), amp: 6});
+    s.on = this.sourcesOn; this.sources.push(s); field.sources.push(s);
   },
-  vertexShader: `
-    uniform sampler2D map; uniform float texel, cell, heightScale;
-    varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying float vVal; varying float vInt; varying float vMat;
-    float h(vec2 uv) { return texture2D(map, uv).r * 2.0 - 1.0; }
-    void main() {
-      vUv = uv;
-      vec4 t = texture2D(map, uv);
-      vVal = t.r * 2.0 - 1.0; vInt = t.g; vMat = t.b;
-      vec3 p = position;
-      p.y += vVal * heightScale;
-      float hl = h(uv - vec2(texel, 0.0)), hr = h(uv + vec2(texel, 0.0));
-      float hd = h(uv - vec2(0.0, texel)), hu = h(uv + vec2(0.0, texel));
-      vNormal = normalize(vec3((hl - hr) * heightScale / (2.0 * cell), 1.0, (hu - hd) * heightScale / (2.0 * cell)));
-      vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      vView = normalize(-mv.xyz);
-      vNormal = normalize(normalMatrix * vNormal);
-      gl_Position = projectionMatrix * mv;
-    }`,
-  fragmentShader: `
-    uniform float mode, edge, fade; uniform vec3 light;
-    varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; varying float vVal; varying float vInt; varying float vMat;
-    // Printed colours (sRGB): paper where the field is zero, burnt orange for crests, olive for troughs.
-    vec3 diverging(float v) {
-      vec3 mid = vec3(0.93, 0.89, 0.82);
-      return v < 0.0 ? mix(mid, vec3(0.34, 0.38, 0.16), pow(-v, 0.8)) : mix(mid, vec3(0.78, 0.33, 0.12), pow(v, 0.8));
+  plane(i) {
+    const s = em.lineSource(i, {omega: this.omega(), amp: 1});
+    s.on = this.sourcesOn; this.sources.push(s); field.sources.push(s);
+  },
+  /** Fill cells where fn(i, j) is true with glass (index n) or metal. */
+  material(fn, kind, n = this.n) {
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      if (!fn(i, j)) continue;
+      const k = j * N + i;
+      if (kind === 'metal') { field.metal[k] = 1; field.eps[k] = 1; }
+      else if (kind === 'glass') { field.metal[k] = 0; field.eps[k] = n * n; }
+      else { field.metal[k] = 0; field.eps[k] = 1; }
     }
-    // Brightness as ink density: paper where it is dark, through pale orange to deep burnt orange where it is brightest.
-    vec3 heat(float x) {
-      vec3 c = mix(vec3(0.93, 0.89, 0.82), vec3(0.91, 0.65, 0.50), smoothstep(0.0, 0.4, x));
-      c = mix(c, vec3(0.78, 0.33, 0.12), smoothstep(0.35, 0.75, x));
-      return mix(c, vec3(0.40, 0.16, 0.06), smoothstep(0.75, 1.0, x));
-    }
-    void main() {
-      float d = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
-      float alpha = smoothstep(edge, edge + fade, d);
-      if (alpha <= 0.0) discard;
-      vec3 base = mix(diverging(vVal), heat(vInt), mode);
-      vec3 n = normalize(vNormal);
-      vec3 l = normalize((viewMatrix * vec4(light, 0.0)).xyz);
-      float diff = max(dot(n, l), 0.0);
-      float spec = pow(max(dot(reflect(-l, n), vView), 0.0), 48.0);
-      vec3 color = base * (0.74 + 0.34 * diff) + spec * 0.06 * (1.0 - mode);
-      if (vMat > 0.3 && vMat < 0.7) color = mix(color, vec3(0.91, 0.65, 0.50), 0.22);
-      if (vMat > 0.9) color = vec3(0.18, 0.21, 0.08);
-      // Colours above are in display (sRGB) terms; convert to linear for the renderer.
-      gl_FragColor = vec4(pow(clamp(color, 0.0, 1.0), vec3(2.2)), alpha);
-    }`,
-});
-const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
-group.base.add(surface);
-// A dark floor under the surface, and a faint frame round the visible area.
-{
-  const inner = (N - 2 * BORDER - 4) * CELL;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(inner * 1.6, inner * 1.6), new THREE.MeshBasicMaterial({color: INK.paper}));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -1.4;
-  group.base.add(floor);
-}
-
-// ---------------------------------------------------------------- props: the slit wall and the lens
-function buildProps() {
-  for (const child of [...group.props.children]) { group.props.remove(child); child.geometry?.dispose(); }
-  if (settings.experiment === 'slits') {
-    const {i, width, slit} = WALL, s1 = cy - settings.gap / 2, s2 = cy + settings.gap / 2;
-    const spans = [[BORDER, s1 - slit / 2], [s1 + slit / 2, s2 - slit / 2], [s2 + slit / 2, N - BORDER]];
-    const material = new THREE.MeshStandardMaterial({color: COLOR.metal, metalness: 0, roughness: .9});
-    for (const [a, b] of spans) {
-      if (b <= a) continue;
-      const [x] = cellToWorld(i + width / 2 - .5, 0), z1 = cellToWorld(0, a)[1], z2 = cellToWorld(0, b)[1];
-      const box = new THREE.Mesh(new THREE.BoxGeometry(width * CELL, 1.1, Math.abs(z2 - z1)), material);
-      box.position.set(x, 0, (z1 + z2) / 2);
-      group.props.add(box);
-    }
-  }
-  if (lens) {
-    const {x0, t, a, R} = lens, alpha = Math.asin(a / R);
-    const c1 = x0 + R - t / 2, c2 = x0 - R + t / 2;
-    const outline = [];
-    for (let k = 0; k <= 60; k++) { const q = Math.PI - alpha + 2 * alpha * k / 60; outline.push([c1 + R * Math.cos(q), cy + R * Math.sin(q)]); }
-    for (let k = 0; k <= 60; k++) { const q = -alpha + 2 * alpha * k / 60; outline.push([c2 + R * Math.cos(q), cy + R * Math.sin(q)]); }
-    const shape = new THREE.Shape(outline.map(([i, j]) => { const [x, z] = cellToWorld(i, j); return new THREE.Vector2(x, -z); }));
-    const depth = 1.5, geometry = new THREE.ExtrudeGeometry(shape, {depth, bevelEnabled: false, curveSegments: 1});
-    geometry.rotateX(-Math.PI / 2);
-    geometry.translate(0, -depth / 2, 0);
-    group.props.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: INK.spotTint, transparent: true, opacity: .3, roughness: .9, metalness: 0, depthWrite: false,
-    })));
-    const ring = outline.flatMap(([i, j]) => { const [x, z] = cellToWorld(i, j); return [x, 0, z]; });
-    for (const y of [-depth / 2, depth / 2]) {
-      const line = stage.line({color: COLOR.glass, width: 1.8, opacity: .9, parent: group.props});
-      line.set([...ring, ...ring.slice(0, 3)].map((v, k) => k % 3 === 1 ? y : v));
-    }
-  }
-}
-
-// ---------------------------------------------------------------- the source: an antenna, or an emitter along the left edge
-const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, 1.5, 16), new THREE.MeshStandardMaterial({
-  color: INK.dark, emissive: INK.spot, emissiveIntensity: 0, metalness: 0, roughness: .8,
-}));
-antenna.position.set(...cellToWorld(N / 2, N / 2).flatMap((v, k) => k === 0 ? [v, .75] : [v]));
-group.source.add(antenna);
-const antennaGlow = stage.sprite(INK.spot, 1.4, group.source);
-antennaGlow.position.set(antenna.position.x, 1.5, antenna.position.z);
-const emitter = stage.line({color: INK.spot, width: 3.2, parent: group.source});
-function updateSource() {
-  const antennaOn = settings.experiment === 'antenna';
-  antenna.visible = antennaGlow.visible = antennaOn;
-  const swing = Math.abs(Math.sin(em.omegaFor(settings.lambda) * field.t));
-  antennaGlow.material.opacity = .35 + .65 * swing;
-  antennaGlow.scale.setScalar(1 + .8 * swing);
-  if (antennaOn) { emitter.setVisible(false); return; }
-  const [x] = cellToWorld(BORDER + 6, 0), z0 = cellToWorld(0, BORDER + 2)[1], z1 = cellToWorld(0, N - BORDER - 3)[1];
-  emitter.setVisible(true);
-  emitter.material.opacity = .25 + .6 * swing;
-  emitter.set([x, .06, z0, x, .06, z1]);
-}
-
-// ---------------------------------------------------------------- the screen behind two slits: where the light lands
-const SCREEN = {i: N - BORDER, from: BORDER + 2, to: N - BORDER - 2, sample: N - BORDER - 6};
-const screenCount = SCREEN.to - SCREEN.from;
-const screenTexture = new THREE.DataTexture(new Uint8Array(screenCount * 4), 1, screenCount, THREE.RGBAFormat);
-screenTexture.colorSpace = THREE.SRGBColorSpace;
-screenTexture.magFilter = screenTexture.minFilter = THREE.LinearFilter;
-{
-  const length = screenCount * CELL, strip = new THREE.Mesh(new THREE.PlaneGeometry(.45, length), new THREE.MeshBasicMaterial({map: screenTexture}));
-  strip.rotation.x = -Math.PI / 2;
-  const [x] = cellToWorld(SCREEN.i, 0), z = (cellToWorld(0, SCREEN.from)[1] + cellToWorld(0, SCREEN.to - 1)[1]) / 2;
-  strip.position.set(x, .02, z);
-  group.screen.add(strip);
-}
-const profile = stage.line({color: INK.dark, width: 2, opacity: .9, parent: group.screen});
-const screenLevels = new Float32Array(screenCount);
-let screenMax = 1e-9;
-const screenTop = new THREE.Vector3();
-function heatColor(u) {
-  // The same ink-density scale as the brightness map: paper, pale orange, burnt orange, deep orange.
-  const stops = [[.93, .89, .82], [.91, .65, .50], [.78, .33, .12], [.40, .16, .06]], at = [0, .4, .75, 1];
-  let k = 0;
-  while (k < 2 && u > at[k + 1]) k++;
-  const f = Math.min(1, Math.max(0, (u - at[k]) / (at[k + 1] - at[k])));
-  return stops[k].map((a, c) => a + (stops[k + 1][c] - a) * f);
-}
-function updateScreen() {
-  group.screen.visible = settings.experiment === 'slits';
-  if (!group.screen.visible) return;
-  let peak = 0;
-  for (let n = 0; n < screenCount; n++) {
-    let sum = 0;
-    for (let di = -2; di <= 2; di++) sum += avgI[(SCREEN.from + n) * N + SCREEN.sample + di];
-    screenLevels[n] = sum / 5;
-    peak = Math.max(peak, screenLevels[n]);
-  }
-  screenMax += (Math.max(peak, 1e-12) - screenMax) * .05;
-  const data = screenTexture.image.data, [x] = cellToWorld(SCREEN.i, 0), flat = [];
-  for (let n = 0; n < screenCount; n++) {
-    const u = Math.min(1, screenLevels[n] / screenMax), [r, g, b] = heatColor(u);
-    data[n * 4] = r * 200; data[n * 4 + 1] = g * 200; data[n * 4 + 2] = b * 200; data[n * 4 + 3] = 255;
-    flat.push(x, .05 + u * 1.4 * heightOn, cellToWorld(0, SCREEN.from + n)[1]);
-  }
-  screenTexture.needsUpdate = true;
-  profile.set(flat);
-  screenTop.set(x, .3, cellToWorld(0, SCREEN.from + 4)[1]);
-}
-
-// ---------------------------------------------------------------- E and B arrows along one line
-const arrows = {
-  e: stage.line({color: COLOR.e, width: 2.4, segments: true, parent: group.arrows}),
-  b: stage.line({color: COLOR.b, width: 2.4, segments: true, parent: group.arrows}),
-  eCurve: stage.line({color: COLOR.e, width: 1.6, opacity: .75, parent: group.arrows}),
-  bCurve: stage.line({color: COLOR.b, width: 1.6, opacity: .75, parent: group.arrows}),
-  rail: stage.line({color: INK.grey, width: 1.2, opacity: .8, dashed: true, dash: [.12, .1], parent: group.arrows}),
-  drop: stage.line({color: INK.grey, width: 1, opacity: .5, dashed: true, dash: [.1, .1], segments: true, parent: group.arrows}),
+    field.rebuild();
+  },
+  probe(name, i, j) { this.probes[name] = {i, j}; },
+  screenAt(i) { this.screen = i; },
+  probeDistanceNm() { const a = this.probes.A, b = this.probes.B; return Math.hypot(a.i - b.i, a.j - b.j) * NM; },
+  sourceGapNm() { const p = this.sources.filter(s => s.kind === 'point'); return p.length > 1 ? Math.hypot(p[0].i - p[1].i, p[0].j - p[1].j) * NM : 0; },
+  indexAt(name) { const p = this.probes[name]; return Math.sqrt(field.eps[Math.round(p.j) * N + Math.round(p.i)]); },
+  screenProfile() {
+    if (this.screen == null) return null;
+    const out = [];
+    for (let j = B; j < N - B; j++) out.push(bright[j * N + this.screen]);
+    return out;
+  },
+  screenPeaks() {
+    const p = this.screenProfile();
+    if (!p || field.t < 2 * V) return 0;
+    const max = Math.max(...p);
+    if (max <= 0) return 0;
+    // Smooth over 5 cells, then count maxima above a fifth of the brightest, at least 6 cells apart.
+    const q = p.map((_, k) => { let sum = 0, c = 0; for (let d = -2; d <= 2; d++) if (p[k + d] != null) { sum += p[k + d]; c++; } return sum / c; });
+    let n = 0, last = -99;
+    for (let k = 1; k < q.length - 1; k++) if (q[k] > .2 * max && q[k] >= q[k - 1] && q[k] > q[k + 1] && k - last >= 6) { n++; last = k; }
+    return n;
+  },
+  screenWidthNm() {
+    const p = this.screenProfile();
+    if (!p || field.t < 2 * V) return 0;
+    const max = Math.max(...p), k = p.indexOf(max);
+    let a = k, b = k;
+    while (a > 0 && p[a] > max / 2) a--;
+    while (b < p.length - 1 && p[b] > max / 2) b++;
+    return (b - a) * NM;
+  },
 };
-function heads(color) {
-  const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(.055, .16, 12), new THREE.MeshBasicMaterial({color}), ARROWS);
-  mesh.frustumCulled = false;
-  group.arrows.add(mesh);
-  return mesh;
-}
-const eHeads = heads(COLOR.e), bHeads = heads(COLOR.b);
-const dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
-const arrowTips = {e: new THREE.Vector3(), b: new THREE.Vector3()};
 
-function updateArrows() {
-  const {i0, i1, j} = probe, len = 1.15, flatE = [], flatB = [], ce = [], cb = [];
-  const z = cellToWorld(0, j)[1];
-  const value = i => {
-    const k = j * N + Math.round(i);
-    return [field.ez[k] / scale, field.hx[k] / scale, field.hy[k] / scale].map(v => Math.max(-1.6, Math.min(1.6, v)));
-  };
-  for (let i = i0; i <= i1; i++) {
-    const [e, hx, hy] = value(i), [x] = cellToWorld(i, j);
-    ce.push(x, RAIL + e * len, z);
-    cb.push(x + hx * len, RAIL, z - hy * len);
-  }
-  arrows.eCurve.set(ce);
-  arrows.bCurve.set(cb);
-  for (let a = 0; a < ARROWS; a++) {
-    const i = i0 + (i1 - i0) * a / (ARROWS - 1), [e, hx, hy] = value(i), [x] = cellToWorld(i, j);
-    flatE.push(x, RAIL, z, x, RAIL + e * len, z);
-    flatB.push(x, RAIL, z, x + hx * len, RAIL, z - hy * len);
-    const place = (mesh, tip, vx, vy, vz, mag) => {
-      dir.set(vx, vy, vz);
-      if (dir.lengthSq() < 1e-6) dir.set(0, 1, 0);
-      dummy.position.copy(tip);
-      dummy.quaternion.setFromUnitVectors(up, dir.normalize());
-      dummy.scale.setScalar(Math.min(1, Math.abs(mag) * 4));
-      dummy.updateMatrix();
-      mesh.setMatrixAt(a, dummy.matrix);
-    };
-    const tipE = new THREE.Vector3(x, RAIL + e * len, z), tipB = new THREE.Vector3(x + hx * len, RAIL, z - hy * len);
-    place(eHeads, tipE, 0, e, 0, e);
-    place(bHeads, tipB, hx, 0, -hy, Math.hypot(hx, hy));
-    if (a === Math.round(ARROWS * .45)) { arrowTips.e.copy(tipE); arrowTips.b.copy(tipB); }
-  }
-  eHeads.instanceMatrix.needsUpdate = bHeads.instanceMatrix.needsUpdate = true;
-  arrows.e.set(flatE);
-  arrows.b.set(flatB);
-  const [xa] = cellToWorld(i0, j), [xb] = cellToWorld(i1, j);
-  arrows.rail.set([xa, RAIL, z, xb, RAIL, z]);
-  arrows.drop.set([xa, RAIL, z, xa, 0, z, xb, RAIL, z, xb, 0, z]);
+function setFrequency(f) {
+  lab.freq = Math.round(Math.max(400, Math.min(750, f)));
+  for (const s of lab.sources) s.retune(lab.omega());
+  renderGenerator();
 }
 
-// The direction of travel, at the far end of the arrow line.
-const travel = new THREE.Mesh(new THREE.ConeGeometry(.1, .32, 16), new THREE.MeshBasicMaterial({color: INK.dark}));
-travel.geometry.rotateZ(-Math.PI / 2);
-group.arrows.add(travel);
-const travelShaft = stage.line({color: INK.dark, width: 2, opacity: 1, parent: group.arrows});
-const travelTip = new THREE.Vector3();
-function updateTravel() {
-  const [xb] = cellToWorld(probe.i1, 0), z = cellToWorld(0, probe.j)[1];
-  travel.position.set(xb + .75, RAIL, z);
-  travelShaft.set([xb + .1, RAIL, z, xb + .62, RAIL, z]);
-  travelTip.set(xb + .75, RAIL + .25, z);
+function step() {
+  field.step();
+  const a = 1 / (6 * lab.lambdaCells());
+  for (let j = B; j < N - B; j++) for (let i = B; i < N - B; i++) {
+    const k = j * N + i, e = field.ez[k];
+    bright[k] += (e * e - bright[k]) * a;
+  }
+  const at = p => field.ez[Math.round(p.j) * N + Math.round(p.i)];
+  hist.A[hist.n % HIST] = at(lab.probes.A); hist.B[hist.n % HIST] = at(lab.probes.B); hist.n++;
 }
 
-// ---------------------------------------------------------------- one wavelength: a steady bracket, with markers riding the wave at its ends
-// The bracket is fixed in space near the source and is exactly one wavelength long (easing when the frequency changes).
-// The two markers sit on the surface at its ends: once the new waves arrive, they rise and fall together.
-const RULER_H = 1.75;
-const ruler = stage.line({color: INK.dark, width: 2, opacity: 1, segments: true, parent: group.ruler});
-const rulerEnds = [stage.sprite(INK.dark, .9, group.ruler), stage.sprite(INK.dark, .9, group.ruler)];
-const rulerMid = new THREE.Vector3();
-let rulerLen = settings.lambda, rulerOn = false;
-function fieldAt(i, j) {
-  const i0 = Math.floor(i), f = i - i0, k = j * N + i0;
-  return field.ez[k] * (1 - f) + field.ez[k + 1] * f;
+// ---------------------------------------------------------------- the tank picture
+const tank = $('c-tank'), tctx = tank.getContext('2d');
+const img = new ImageData(V, V), off = new OffscreenCanvas(V, V), octx = off.getContext('2d');
+let brightScale = 1e-6, size = 1, dpr = 1;
+new ResizeObserver(() => {
+  const r = tank.getBoundingClientRect(); dpr = Math.min(devicePixelRatio || 1, 2);
+  size = r.width; tank.width = Math.round(r.width * dpr); tank.height = Math.round(r.height * dpr);
+  draw();
+}).observe(tank);
+const px = i => (i - B + .5) * size / V;
+const cellOf = x => x / size * V + B - .5;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+function nearSource(i, j) {
+  for (const s of lab.sources) if (s.kind === 'point' && Math.abs(s.i - i) < 5 && Math.abs(s.j - j) < 5) return true;
+  return false;
 }
-function updateRuler(dt) {
-  rulerOn = layers.ruler && (settings.experiment === 'antenna' || settings.experiment === 'plane') && heightOn > .5;
-  group.ruler.visible = rulerOn;
-  rulerLen += (settings.lambda - rulerLen) * Math.min(1, dt * 5);
-  if (!rulerOn) return;
-  // Antenna: along the radius to the left of the source (the arrows use the right). Plane wave: a row nearer the viewer.
-  const antenna = settings.experiment === 'antenna', j = antenna ? N / 2 : N / 2 - 40, dir = antenna ? -1 : 1;
-  const a = antenna ? N / 2 - 22 : BORDER + 34, b = a + dir * rulerLen;
-  const z = cellToWorld(0, j)[1], [xa] = cellToWorld(a, 0), [xb] = cellToWorld(b, 0);
-  const top = i => Math.tanh(fieldAt(i, j) / scale) * surfaceMaterial.uniforms.heightScale.value;
-  const ha = top(a), hb = top(b);
-  ruler.set([xa, RULER_H, z, xb, RULER_H, z, xa, RULER_H, z, xa, ha + .1, z, xb, RULER_H, z, xb, hb + .1, z]);
-  rulerEnds[0].position.set(xa, ha + .08, z);
-  rulerEnds[1].position.set(xb, hb + .08, z);
-  rulerMid.set((xa + xb) / 2, RULER_H + .1, z);
+function paintImage() {
+  // Adaptive gain from the largest value away from the antennas, eased so the picture does not flicker.
+  let mb = 0;
+  for (let j = B; j < N - B; j += 2) for (let i = Math.max(B, lab.exp.gainFrom ?? B); i < N - B; i += 2) {
+    if (nearSource(i, j)) continue;
+    mb = Math.max(mb, bright[j * N + i]);
+  }
+  brightScale += (Math.max(mb, 1e-8) - brightScale) * .08;
+  // Base: brightness (field squared, averaged over time). On top: thin ink lines where the field is at a crest now.
+  const d = img.data;
+  for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) {
+    const k = (j + B) * N + i + B, o = (j * V + i) * 4;
+    let c;
+    if (field.metal[k]) c = RGB.ink;
+    else {
+      const x = Math.min(1, bright[k] / brightScale);
+      c = x < .3 ? mix(RGB.paper, RGB.pale, x / .3) : x < .7 ? mix(RGB.pale, RGB.spot, (x - .3) / .4) : mix(RGB.spot, RGB.deep, (x - .7) / .3);
+      if (field.eps[k] > 1.001) c = mix(c, RGB.tint, .5);
+      if (lab.lines && bright[k] > .015 * brightScale) {
+        const v = field.ez[k] / Math.sqrt(2 * bright[k]);
+        if (v > .94) c = mix(c, RGB.ink, Math.min(1, (v - .94) / .04) * .55);
+      }
+    }
+    d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+  }
+  octx.putImageData(img, 0, 0);
+}
+function arrowHead(ctx, x, y, angle, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(-s * .8, s * .6); ctx.lineTo(-s * .45, 0); ctx.lineTo(-s * .8, -s * .6); ctx.closePath();
+  ctx.fillStyle = color; ctx.fill(); ctx.restore();
+}
+function tag(ctx, s, x, y, color = C.ink) {
+  ctx.font = '700 11px Inter, system-ui, sans-serif';
+  const w = ctx.measureText(s).width;
+  ctx.fillStyle = 'rgba(244,238,224,.92)'; ctx.fillRect(x - 3, y - 11, w + 6, 15);
+  ctx.fillStyle = color; ctx.fillText(s, x, y);
+}
+let hover = null;
+function draw() {
+  if (!lab.exp) return;
+  paintImage();
+  const ctx = tctx;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(off, 0, 0, size, size);
+  ctx.lineCap = 'round';
+  // Glass outlines are implied by the tint; draw the screen and its brightness profile.
+  if (lab.screen != null) {
+    const x = px(lab.screen), p = lab.screenProfile(), max = Math.max(...p, 1e-12);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(200,84,31,.28)'; ctx.strokeStyle = C.spot; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(x, 0);
+    p.forEach((v, k) => ctx.lineTo(x + 3 + v / max * size * .1, px(k + B)));
+    ctx.lineTo(x, size); ctx.closePath(); ctx.fill(); ctx.stroke();
+    tag(ctx, 'SCREEN', x + 6, 16);
+  }
+  // Sources.
+  for (const s of lab.sources) {
+    if (s.kind === 'line') {
+      const x = px(s.i);
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.setLineDash([2, 5]);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke(); ctx.setLineDash([]);
+      for (let k = 1; k < 6; k++) arrowHead(ctx, x + 10, size * k / 6, 0, 6, C.ink);
+      tag(ctx, 'PLANE WAVE →', x + 4, 16);
+    } else {
+      const x = px(s.i), y = px(s.j);
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5;
+      for (const r of [9, 14]) { ctx.beginPath(); ctx.arc(x, y, r, -.7, .7); ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, r, Math.PI - .7, Math.PI + .7); ctx.stroke(); }
+      ctx.fillStyle = s.on ? C.spot : C.ink3; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    }
+  }
+  // Probes.
+  for (const [name, color] of [['A', C.spot], ['B', '#7d8a2a']]) {
+    const p = lab.probes[name], x = px(p.i), y = px(p.j);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(x, y, 8, 0, 2 * Math.PI); ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 8, 0, 2 * Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 13, y); ctx.lineTo(x - 4, y); ctx.moveTo(x + 4, y); ctx.lineTo(x + 13, y); ctx.moveTo(x, y - 13); ctx.lineTo(x, y - 4); ctx.moveTo(x, y + 4); ctx.lineTo(x, y + 13); ctx.stroke();
+    tag(ctx, name, x + 11, y - 9, color === C.spot ? C.spot : C.ink);
+  }
+  // Scale bar: 1 µm.
+  const bar = 1000 / NM * size / V;
+  ctx.fillStyle = 'rgba(244,238,224,.92)'; ctx.fillRect(8, size - 26, bar + 16, 20);
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(16, size - 12); ctx.lineTo(16 + bar, size - 12); ctx.moveTo(16, size - 16); ctx.lineTo(16, size - 8); ctx.moveTo(16 + bar, size - 16); ctx.lineTo(16 + bar, size - 8); ctx.stroke();
+  ctx.font = '700 10px Inter, system-ui, sans-serif'; ctx.fillStyle = C.ink; ctx.fillText('1 µm', 20 + bar / 2 - 12, size - 15);
+  if (hover?.brush) { ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(hover.x, hover.y, lab.brush * size / V, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]); }
+  drawScope();
 }
 
-// ---------------------------------------------------------------- measurements
-const ratioWindow = {e: 0, h: 0, steps: 0, value: null};
-function measure() {
-  const k = probe.j * N + Math.round((probe.i0 + probe.i1) / 2);
-  ratioWindow.e = Math.max(ratioWindow.e, Math.abs(field.ez[k]));
-  ratioWindow.h = Math.max(ratioWindow.h, Math.hypot(field.hx[k], field.hy[k]));
-  if (++ratioWindow.steps >= 2 * settings.lambda / em.COURANT) {
-    if (field.t > 6 * settings.lambda + (probe.i1 - BORDER)) ratioWindow.value = ratioWindow.e / ratioWindow.h;
-    ratioWindow.e = ratioWindow.h = ratioWindow.steps = 0;
+// ---------------------------------------------------------------- oscilloscope
+const scope = $('c-scope'), sctx = scope.getContext('2d');
+function drawScope() {
+  const r = scope.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+  if (scope.width !== Math.round(r.width * d)) { scope.width = Math.round(r.width * d); scope.height = Math.round(r.height * d); }
+  const w = r.width, h = r.height, ctx = sctx;
+  ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, w, h);
+  const perStep = field.dt, period = lab.lambdaCells(), win = Math.min(HIST, Math.round(4 * period / perStep)), n = Math.min(win, hist.n);
+  // Graticule.
+  ctx.strokeStyle = 'rgba(201,201,163,.16)'; ctx.lineWidth = 1;
+  for (let k = 1; k < 8; k++) { ctx.beginPath(); ctx.moveTo(w * k / 8, 0); ctx.lineTo(w * k / 8, h); ctx.stroke(); }
+  for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(0, h * k / 4); ctx.lineTo(w, h * k / 4); ctx.stroke(); }
+  if (n < 2) return;
+  let max = 1e-9;
+  for (let k = 0; k < n; k++) { const idx = (hist.n - 1 - k) % HIST; max = Math.max(max, Math.abs(hist.A[idx]), Math.abs(hist.B[idx])); }
+  for (const [key, color] of [['B', C.traceB], ['A', C.trace]]) {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.shadowColor = color; ctx.shadowBlur = 4;
+    ctx.beginPath();
+    for (let k = 0; k < n; k++) {
+      const idx = (hist.n - n + k) % HIST, x = w * (k + win - n) / win, y = h / 2 - hist[key][idx] / max * h * .42;
+      k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke(); ctx.shadowBlur = 0;
   }
+  const rms = key => { let s = 0; for (let k = 0; k < n; k++) { const v = hist[key][(hist.n - 1 - k) % HIST]; s += v * v; } return Math.sqrt(s / n); };
+  const a = rms('A'), b = rms('B'), top = Math.max(a, b, 1e-12);
+  $('amp-a').textContent = `${Math.round(a / top * 100)}%`; $('amp-b').textContent = `${Math.round(b / top * 100)}%`;
+  $('scope-t').textContent = `${(4 * 1e6 / lab.freq / 1000).toFixed(2)} fs across`;
 }
 
-/** Write the field, the average brightness and the materials into the surface texture. */
-function writeTexture() {
-  // Scale the colours to the region that matters: behind the wall for the slits, everywhere otherwise.
-  let sum = 0, count = 0, isum = 0;
-  const iFrom = settings.experiment === 'slits' ? WALL.i + WALL.width + 6 : BORDER;
-  for (let j = BORDER; j < N - BORDER; j += 3) for (let i = iFrom; i < N - BORDER; i += 3) {
-    const k = j * N + i;
-    sum += field.ez[k] ** 2;
-    isum += avgI[k];
-    count++;
+// ---------------------------------------------------------------- the rack
+function wavelengthColor(nm) {
+  // Approximate sRGB of a pure spectral colour (Bruton), with intensity falloff at the ends of the visible range.
+  let r = 0, g = 0, b = 0;
+  if (nm < 440) { r = (440 - nm) / 60; b = 1; } else if (nm < 490) { g = (nm - 440) / 50; b = 1; } else if (nm < 510) { g = 1; b = (510 - nm) / 20; }
+  else if (nm < 580) { r = (nm - 510) / 70; g = 1; } else if (nm < 645) { r = 1; g = (645 - nm) / 65; } else r = 1;
+  const f = nm < 420 ? .3 + .7 * (nm - 380) / 40 : nm > 700 ? .3 + .7 * (780 - nm) / 80 : 1;
+  return `rgb(${[r, g, b].map(v => Math.round(255 * (v * f) ** .8)).join(',')})`;
+}
+const colourName = nm => nm < 450 ? 'violet' : nm < 495 ? 'blue' : nm < 520 ? 'cyan' : nm < 565 ? 'green' : nm < 590 ? 'yellow' : nm < 625 ? 'orange' : 'red';
+function renderKnob() {
+  const svg = $('knob-f'), t = (lab.freq - 400) / 350, a = (-135 + 270 * t) * Math.PI / 180;
+  let ticks = '';
+  for (let f = 400; f <= 750; f += 10) {
+    const u = (-135 + 270 * (f - 400) / 350) * Math.PI / 180, r1 = 34, r2 = f % 50 ? 37 : 39.5;
+    ticks += `<line x1="${40 + Math.sin(u) * r1}" y1="${40 - Math.cos(u) * r1}" x2="${40 + Math.sin(u) * r2}" y2="${40 - Math.cos(u) * r2}" stroke="${wavelengthColor(em.nmForTHz(f))}" stroke-width="${f % 50 ? 1.6 : 2.6}"/>`;
   }
-  const rms = Math.sqrt(sum / count);
-  scale += (Math.max(rms * 4.2, 1e-4) - scale) * .05;
-  iScale += (Math.max(isum / count * 4.5, 1e-8) - iScale) * .05;
-  const data = texture.image.data;
-  const dimBefore = settings.experiment === 'slits' ? WALL.i : -1;
-  for (let k = 0; k < N * N; k++) {
-    // In front of the slit wall the light is far stronger; it is drawn at 35% so the fringes behind stay readable.
-    const v = Math.tanh(field.ez[k] / scale * (k % N < dimBefore ? .35 : 1));
-    data[k * 4] = (v * .5 + .5) * 255;
-    // In front of the slit wall the light is far brighter; dim it there so the fringes stay readable.
-    data[k * 4 + 1] = Math.tanh(avgI[k] / iScale * (k % N < dimBefore ? .01 : 1)) * 255;
-    data[k * 4 + 2] = field.metal[k] ? 255 : field.eps[k] > 1.01 ? 128 : 0;
-    data[k * 4 + 3] = 255;
-  }
-  texture.needsUpdate = true;
+  svg.innerHTML = `${ticks}<circle cx="40" cy="40" r="29" fill="#2f3614"/><circle cx="40" cy="40" r="25" fill="#454d22" stroke="#1f2410" stroke-width="2"/>
+    <line x1="${40 + Math.sin(a) * 8}" y1="${40 - Math.cos(a) * 8}" x2="${40 + Math.sin(a) * 23}" y2="${40 - Math.cos(a) * 23}" stroke="#f0a35e" stroke-width="3.5" stroke-linecap="round"/>`;
+  svg.setAttribute('aria-valuenow', lab.freq); svg.setAttribute('aria-valuemin', 400); svg.setAttribute('aria-valuemax', 750);
+  svg.setAttribute('aria-valuetext', `${lab.freq} terahertz`);
+}
+function renderGenerator() {
+  renderKnob();
+  const nm = lab.lambdaNm(), col = wavelengthColor(nm);
+  $('lcd-f').innerHTML = `<span>Frequency</span>${lab.freq} THz<br><span>Wavelength</span>${nm.toFixed(0)} nm<br><span>Period</span>${(1e3 / lab.freq).toFixed(2)} fs<br><span>Colour</span><i class="swatch" style="--c:${col}"></i> ${colourName(nm)}`;
+}
+function renderExperiment() {
+  const x = lab.exp;
+  $('presets').innerHTML = experiments.map((e, k) => `<button class="key${e === x ? ' on' : ''}" data-id="${e.id}" aria-pressed="${e === x}"><i class="led"></i>${k + 1} ${e.label}</button>`).join('');
+  $('notes-card').innerHTML = `<h1>${x.title}</h1>${x.text}<div class="formula">${x.formula}<small>${x.note}</small></div>
+    <p class="eyebrow">Try</p><ul class="try">${x.tries.map(t => `<li>${t}</li>`).join('')}</ul><div class="insight" id="insight"></div>`;
+  renderView();
+}
+function renderView() {
+  const b = $('lines'); b.classList.toggle('on', lab.lines); b.setAttribute('aria-pressed', String(lab.lines));
+  $('caption').innerHTML = '<b>Shading</b>: how bright the light is at each place, averaged over time, which is what your eye or a camera would record. Dark bands are where waves cancel. ' +
+    (lab.lines ? '<b>Ink lines</b>: the wave crests at this instant, drifting outwards at the speed of light, slowed down about 10¹⁵ times.' : 'Turn on <b>Crest lines</b> to see the waves themselves move.');
+  $('legend').innerHTML = '<span><i style="--c:#e9b99a"></i>Dim</span><span><i style="--c:#c8541f"></i>Bright</span><span><i style="--c:#66290f"></i>Brightest</span>' +
+    (lab.lines ? '<span><i style="--c:#2f3614;height:3px"></i>Crest</span>' : '') + '<span><i style="--c:#c9c9a3"></i>Glass</span><span><i style="--c:#2f3614"></i>Metal</span>';
+}
+function renderInsight() { const el = $('insight'); if (el) el.innerHTML = lab.exp.insight(lab); }
+
+/** Runs the tank forward quickly, unseen, so the steady pattern is already there. */
+function settle(steps) {
+  for (let k = 0; k < steps; k++) step();
+  brightScale = 1e-6; paintImage(); brightScale = Math.max(brightScale, 1e-8);
 }
 
-function simulate(dtFrame) {
-  if (!playing) return;
-  stepDebt += RATES[settings.rate] * Math.min(dtFrame * 60, 3);
-  const decay = 1 / (3 * settings.lambda / em.COURANT);
-  while (stepDebt >= 1) {
-    field.step();
-    for (let k = 0; k < avgI.length; k++) avgI[k] += (field.ez[k] * field.ez[k] - avgI[k]) * decay;
-    measure();
-    stepDebt -= 1;
-  }
-  // Forget ripples that have finished.
-  for (let s = field.sources.length - 1; s >= 0; s--) {
-    const src = field.sources[s];
-    if (src.kind === 'pulse' && field.t > src.t0 + 6 * src.width) field.sources.splice(s, 1);
-  }
+function load(x) {
+  lab.exp = x; lab.sources = []; lab.screen = null;
+  field.sources.length = 0; field.clear(); field.eps.fill(1); field.metal.fill(0); field.rebuild();
+  bright.fill(0); hist.n = 0; hist.A.fill(0); hist.B.fill(0); brightScale = 1e-6;
+  x.setup(lab);
+  settle(2.4 * V / field.dt);
+  renderExperiment(); renderGenerator(); renderInsight(); draw();
 }
 
-// ---------------------------------------------------------------- readout, labels, tooltip
-const swatchColor = new THREE.Color();
-function colourName(nm) {
-  return nm < 450 ? 'Violet' : nm < 485 ? 'Blue' : nm < 499 ? 'Cyan' : nm < 565 ? 'Green' : nm < 590 ? 'Yellow' : nm < 625 ? 'Orange' : 'Red';
+// ---------------------------------------------------------------- interaction
+function setTool(tool) {
+  lab.tool = tool;
+  for (const b of document.querySelectorAll('[data-tool]')) { b.classList.toggle('on', b.dataset.tool === tool); b.setAttribute('aria-pressed', String(b.dataset.tool === tool)); }
+  $('tool-hint').textContent = HINTS[tool];
+  tank.classList.toggle('move', tool === 'move');
 }
-/** The key under the readout: what height and colour mean in the current view. */
-function updateLegend() {
-  const bright = intensityMix > .5 || layers.intensity, top = targetHeight < .5;
-  const key = `${bright}|${top}`;
-  if ($('legend').dataset.key === key) return;
-  $('legend').dataset.key = key;
-  $('legend').classList.toggle('bright', bright);
-  $('legend-lo').textContent = bright ? 'dark' : 'E down';
-  $('legend-mid').textContent = bright ? '' : '0';
-  $('legend-hi').textContent = bright ? 'bright' : 'E up';
-  $('legend-caption').textContent = bright
-    ? 'Colour: brightness, the average of E² over the last few cycles, printed as ink: the deeper the orange, the brighter the light.'
-    : top ? 'Seen from above: colour is the electric field at this instant. Crests are orange, troughs olive.'
-      : 'Height and colour: the electric field at this instant. The wave moves; the pattern of crests is the light.';
-}
-const labelPoint = new THREE.Vector3();
-function lensFocus() {
-  if (!lens) return null;
-  const {x0, t, R} = lens, n = settings.n;
-  const power = (n - 1) * (2 / R - (n - 1) * t / (n * R * R));
-  const f = 1 / power, back = f * (1 - (n - 1) * t / (n * R));
-  return x0 + t / 2 + back;
-}
-function updateReadout() {
-  const nm = lambdaNm();
-  $('lambda').textContent = `${Math.round(nm)} nm`;
-  $('lambda-note').textContent = `${colourName(nm)} light · frequency ${settings.freq} THz`;
-  $('lambda-swatch').style.setProperty('--c', `#${spectrumColor(nm, swatchColor).getHexString()}`);
-  updateLegend();
-  $('speed').textContent = lens ? `c / ${settings.n.toFixed(2)}` : 'c';
-  $('speed-note').textContent = lens ? `in the glass: ${(1 / settings.n).toFixed(2)} c · in air: c` : 'the same in every direction';
-  $('row-ratio').hidden = !layers.arrows;
-  $('ratio').textContent = ratioWindow.value ? ratioWindow.value.toFixed(2) : '…';
-}
-function updateLabels() {
-  const rects = [$('story'), $('panel'), $('readout'), $('transport')].filter(el => el.offsetParent).map(el => el.getBoundingClientRect());
-  const pin = (id, p, show) => positionLabel($(id), labelPoint.copy(p), camera, {show, avoid: rects});
-  pin('label-e', arrowTips.e, layers.arrows);
-  pin('label-b', arrowTips.b, layers.arrows);
-  pin('label-travel', travelTip, layers.arrows);
-  $('label-ruler-text').textContent = `one wavelength · ${Math.round(lambdaNm())} nm`;
-  pin('label-ruler', rulerMid, rulerOn);
-  pin('label-screen', screenTop, group.screen.visible);
-  if (lens) {
-    const [x, z] = cellToWorld(lens.x0, cy - lens.a - 4);
-    pin('label-glass', labelPoint.set(x, .8, z), true);
-    const focus = lensFocus(), visible = focus < N - BORDER - 4;
-    const [fx, fz] = cellToWorld(Math.min(focus, N - BORDER - 4), cy);
-    pin('label-focus', labelPoint.set(fx, .3, fz), visible && heightOn > .5);
-  } else {
-    $('label-glass').style.visibility = $('label-focus').style.visibility = 'hidden';
+const cellAt = event => { const r = tank.getBoundingClientRect(); return [cellOf(event.clientX - r.left), cellOf(event.clientY - r.top), event.clientX - r.left, event.clientY - r.top]; };
+const clampCell = v => Math.max(B + 1, Math.min(N - B - 2, v));
+function grab(i, j) {
+  const near = (a, b, r = 4.5) => Math.hypot(a - i, b - j) < r * V / size * 3;
+  for (const name of ['A', 'B']) if (near(lab.probes[name].i, lab.probes[name].j)) return {kind: 'probe', name};
+  for (const s of lab.sources) {
+    if (s.kind === 'point' && near(s.i, s.j)) return {kind: 'source', s};
+    if (s.kind === 'line' && Math.abs(s.i - i) < 3) return {kind: 'line', s};
   }
+  if (lab.screen != null && Math.abs(lab.screen - i) < 3) return {kind: 'screen'};
+  return null;
 }
-
-const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
-function cellAt(clientX, clientY) {
-  pointer.set(clientX / innerWidth * 2 - 1, -(clientY / innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  if (!raycaster.ray.intersectPlane(floorPlane, hit)) return null;
-  const [i, j] = worldToCell(hit.x, hit.z).map(Math.round);
-  if (i < BORDER + 2 || j < BORDER + 2 || i > N - BORDER - 3 || j > N - BORDER - 3) return null;
-  return [i, j];
+let drag = null, lastPaint = null;
+function paint(i, j) {
+  const r = lab.brush, kind = lab.tool === 'erase' ? 'air' : lab.tool;
+  const from = lastPaint ?? [i, j], steps = Math.max(1, Math.ceil(Math.hypot(i - from[0], j - from[1]) / (r / 2)));
+  for (let s = 1; s <= steps; s++) {
+    const ci = from[0] + (i - from[0]) * s / steps, cj = from[1] + (j - from[1]) * s / steps;
+    for (let y = Math.floor(cj - r); y <= cj + r; y++) for (let x = Math.floor(ci - r); x <= ci + r; x++) {
+      if (x < 1 || y < 1 || x >= N - 1 || y >= N - 1 || (x - ci) ** 2 + (y - cj) ** 2 > r * r) continue;
+      const k = y * N + x;
+      if (kind === 'metal') { field.metal[k] = 1; field.eps[k] = 1; field.ez[k] = 0; }
+      else if (kind === 'glass') { field.metal[k] = 0; field.eps[k] = lab.n * lab.n; }
+      else { field.metal[k] = 0; field.eps[k] = 1; }
+    }
+  }
+  lastPaint = [i, j];
+  field.rebuild();
 }
-function describe([i, j]) {
-  const k = j * N + i, e = field.ez[k] / scale, b = Math.hypot(field.hx[k], field.hy[k]) / scale;
-  const material = field.metal[k] ? 'metal (no field inside)' : field.eps[k] > 1.01 ? `glass, n = ${Math.sqrt(field.eps[k]).toFixed(2)}` : 'air, n = 1';
-  return `<h4>Here</h4>
-    <div class="row"><span>Electric field E</span><span>${e >= 0 ? '+' : '−'}${Math.abs(e).toFixed(2)}</span></div>
-    <div class="row"><span>Magnetic field c·B</span><span>${b.toFixed(2)}</span></div>
-    <div class="row"><span>Average brightness</span><span>${Math.round(texture.image.data[k * 4 + 1] / 2.55)}%</span></div>
-    <div class="row"><span>Material</span><span>${material}</span></div>
-    <div class="note">Fields relative to the wave’s typical strength. Tap to make a ripple here.</div>`;
-}
-function ripple([i, j]) {
-  field.sources.push(em.pulse({i, j, t0: field.t + 8, width: 2.6, amp: 40}));
-}
-let downAt = null, rippleHinted = false;
-$('scene').addEventListener('pointermove', event => {
-  if (event.pointerType !== 'mouse' || event.buttons) return;
-  const c = cellAt(event.clientX, event.clientY);
-  showTip(event.clientX, event.clientY, c && describe(c));
-  $('scene').classList.toggle('pointing', !!c);
+tank.addEventListener('pointerdown', event => {
+  const [i, j] = cellAt(event);
+  tank.setPointerCapture(event.pointerId);
+  if (lab.tool === 'move') drag = grab(i, j);
+  else if (['glass', 'metal', 'erase'].includes(lab.tool)) { drag = {kind: 'paint'}; lastPaint = null; paint(i, j); }
+  else if (lab.tool === 'source') lab.point(Math.round(clampCell(i)), Math.round(clampCell(j)));
+  else if (lab.tool === 'ripple') field.sources.push(em.pulse({i: Math.round(clampCell(i)), j: Math.round(clampCell(j)), t0: field.t + 6, width: 2.5, amp: 8}));
+  else if (lab.tool === 'screen') lab.screen = Math.round(clampCell(i));
+  draw();
 });
-$('scene').addEventListener('pointerdown', event => { downAt = [event.clientX, event.clientY]; });
-$('scene').addEventListener('pointerup', event => {
-  if (!downAt || Math.hypot(event.clientX - downAt[0], event.clientY - downAt[1]) > 6) return;
-  const c = cellAt(event.clientX, event.clientY);
-  if (!c) return;
-  ripple(c);
-  if (!playing) setPlaying(true);
-  if (!rippleHinted) { toast('A single ripple: it spreads at the speed of light.'); rippleHinted = true; }
-  if (event.pointerType !== 'mouse') showTip(event.clientX, event.clientY, describe(c));
+tank.addEventListener('pointermove', event => {
+  const [i, j, x, y] = cellAt(event);
+  hover = ['glass', 'metal', 'erase'].includes(lab.tool) ? {brush: true, x, y} : null;
+  if (drag?.kind === 'paint') paint(i, j);
+  else if (drag?.kind === 'probe') lab.probes[drag.name] = {i: clampCell(i), j: clampCell(j)};
+  else if (drag?.kind === 'source') { drag.s.i = Math.round(clampCell(i)); drag.s.j = Math.round(clampCell(j)); }
+  else if (drag?.kind === 'line') drag.s.i = Math.round(clampCell(i));
+  else if (drag?.kind === 'screen') lab.screen = Math.round(clampCell(i));
+  if (drag) bright.fill(0);
+  if (drag && drag.kind !== 'paint') showTip(event, null);
+  else if (!drag) {
+    const g = lab.tool === 'move' && grab(i, j);
+    const k = Math.round(j) * N + Math.round(i), n = Math.sqrt(field.eps[k]);
+    showTip(event, g?.kind === 'probe' ? `<b>Probe ${g.name}</b>Its field is traced on the oscilloscope. Drag it.` :
+      g?.kind === 'source' ? `<b>Antenna</b>Driven at ${lab.freq} THz by the signal generator. Drag it.` :
+      g?.kind === 'line' ? '<b>Plane-wave source</b>A whole line of antennas in step, making straight wavefronts. Drag it sideways.' :
+      g?.kind === 'screen' ? '<b>Screen</b>Shows how bright the light is along it. Drag it.' :
+      field.metal[k] ? '<b>Metal</b>The field is zero inside: light reflects.' :
+      n > 1.001 ? `<b>Glass, n = ${n.toFixed(2)}</b>Light moves at ${(1 / n).toFixed(2)} c here, with wavelength ${(lab.lambdaNm() / n).toFixed(0)} nm.` : null);
+  }
+  if (!lab.playing) draw();
 });
-$('scene').addEventListener('pointerleave', () => showTip(0, 0, null));
-
-// ---------------------------------------------------------------- camera
-const FRAMING = {
-  surface: () => narrow() ? [0, 28, 27] : [0, 15, 17.5],
-  top: () => narrow() ? [0, 40, .5] : [0, 24, .5],
+const end = () => {
+  // After a change, run ahead briefly so the new steady pattern appears straight away.
+  if (drag && drag.kind !== 'probe') settle(1.4 * V / field.dt);
+  drag = null; lastPaint = null; tank.classList.remove('grab');
 };
-const offset = new THREE.Vector3(), target = new THREE.Vector3(0, 0, 0);
-let offsetTween = null;
-/** Pulls the camera back on narrow-aspect windows so the whole visible grid stays in view. */
-function fitted(v, top = false) {
-  const halfWidth = (N - 2 * BORDER) * CELL / 2 + .6, tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-  // From above, leave room for the side panels so the screen at the far edge stays visible.
-  return v.multiplyScalar(Math.max(1, halfWidth / tanHalf * (narrow() ? 1.08 : top ? 2.1 : 1.7) / v.length()));
+tank.addEventListener('pointerup', end);
+tank.addEventListener('pointercancel', end);
+tank.addEventListener('pointerleave', () => { hover = null; showTip(null); });
+function showTip(event, html) {
+  const tip = $('tip');
+  if (!html) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = html; tip.classList.add('visible');
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.transform = `translate(${Math.min(innerWidth - w - 10, event.clientX + 16)}px, ${Math.max(10, Math.min(innerHeight - h - 10, event.clientY - h - 12))}px)`;
 }
-function setFraming(name, animate = true) {
-  const to = fitted(new THREE.Vector3(...FRAMING[name]()), name === 'top');
-  if (animate && !reducedMotion) offsetTween = {from: offset.clone(), to, u: 0};
-  else { offset.copy(to); offsetTween = null; }
-}
-controls.addEventListener('start', () => { offsetTween = null; });
 
-// ---------------------------------------------------------------- controls
+// Frequency knob: drag up or down, scroll, or use the arrow keys.
+const knob = $('knob-f');
+let knobDrag = null;
+knob.addEventListener('pointerdown', event => { knob.setPointerCapture(event.pointerId); knobDrag = {y: event.clientY, f: lab.freq}; });
+knob.addEventListener('pointermove', event => { if (knobDrag) setFrequency(knobDrag.f + (knobDrag.y - event.clientY) * 1.6); });
+knob.addEventListener('pointerup', () => { knobDrag = null; });
+knob.addEventListener('wheel', event => { event.preventDefault(); setFrequency(lab.freq + (event.deltaY < 0 ? 5 : -5)); }, {passive: false});
+knob.addEventListener('keydown', event => {
+  const d = {ArrowUp: 5, ArrowRight: 5, ArrowDown: -5, ArrowLeft: -5, PageUp: 25, PageDown: -25}[event.key];
+  if (d) { event.preventDefault(); event.stopPropagation(); setFrequency(lab.freq + d); }
+});
+
+$('presets').addEventListener('click', event => { const b = event.target.closest('[data-id]'); if (b) load(experiments.find(x => x.id === b.dataset.id)); });
+$('tools').addEventListener('click', event => { const b = event.target.closest('[data-tool]'); if (b) setTool(b.dataset.tool); });
+$('clear').onclick = () => { field.eps.fill(1); field.metal.fill(0); field.rebuild(); bright.fill(0); draw(); };
+$('size').oninput = event => { lab.brush = +event.target.value; $('out-size').textContent = `${(lab.brush * NM / 1000).toFixed(2)} µm`; };
+$('n').oninput = event => { lab.n = +event.target.value; $('out-n').textContent = lab.n.toFixed(2); };
+$('pulse').onclick = () => {
+  for (const s of lab.sources) {
+    if (s.kind === 'point') field.sources.push(em.pulse({i: s.i, j: s.j, t0: field.t + 6, width: 2.5, amp: 8}));
+    else field.sources.push(em.pulse({i: s.i, t0: field.t + 6, width: 2.5, amp: 1.4}));
+  }
+};
+$('sources-on').onclick = event => {
+  lab.sourcesOn = !lab.sourcesOn;
+  for (const s of lab.sources) s.on = lab.sourcesOn;
+  event.currentTarget.classList.toggle('on', lab.sourcesOn); event.currentTarget.setAttribute('aria-pressed', String(lab.sourcesOn));
+};
+$('lines').onclick = () => { lab.lines = !lab.lines; renderView(); draw(); };
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => {
+  lab.speed = +b.dataset.speed;
+  for (const x of document.querySelectorAll('[data-speed]')) x.classList.toggle('on', x === b);
+};
 const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
-function setPlaying(on) {
-  playing = on;
-  $('play').innerHTML = on ? ICON_PAUSE : ICON_PLAY;
-  $('play').setAttribute('aria-label', on ? 'Pause' : 'Play');
-}
-function applyLayers(next) {
-  if (next) for (const key of Object.keys(layers)) layers[key] = !!next[key];
-  group.arrows.visible = layers.arrows;
-  for (const chip of document.querySelectorAll('.chip')) setPressed(chip, layers[chip.dataset.layer]);
-}
-function setView(top, announce = false) {
-  targetHeight = top ? 0 : 1;
-  if (reducedMotion) heightOn = targetHeight;
-  setPressed($('view-surface'), !top);
-  setPressed($('view-top'), top);
-  if (announce) {
-    setFraming(top ? 'top' : 'surface');
-    toast(top ? 'Seen from above: colour shows the field.' : 'Height shows the electric field.');
+function setPlaying(on) { lab.playing = on; $('play').innerHTML = on ? ICON_PAUSE : ICON_PLAY; $('play').setAttribute('aria-label', on ? 'Pause' : 'Play'); }
+$('play').onclick = () => setPlaying(!lab.playing);
+$('restart').onclick = () => load(lab.exp);
+const about = $('about-dialog');
+$('about').onclick = () => about.showModal();
+about.querySelector('.close').onclick = () => about.close();
+about.addEventListener('click', event => { if (event.target === about) about.close(); });
+addEventListener('keydown', event => {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, dialog[open], [role=slider]')) return;
+  if (event.key === ' ') { event.preventDefault(); setPlaying(!lab.playing); }
+  else if (event.key === 'r' || event.key === 'R') load(lab.exp);
+  else if (event.key === 'v' || event.key === 'V') { lab.lines = !lab.lines; renderView(); }
+  else if (/^[1-8]$/.test(event.key)) load(experiments[+event.key - 1]);
+});
+
+// ---------------------------------------------------------------- loop
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let lastInsight = 0, stepDebt = 0;
+function frame(now) {
+  if (lab.playing) {
+    stepDebt += reducedMotion ? lab.speed / 4 : lab.speed;
+    for (; stepDebt >= 1; stepDebt--) step();
   }
-}
-function updateControls() {
-  for (const b of document.querySelectorAll('[data-experiment]')) setPressed(b, b.dataset.experiment === settings.experiment);
-  $('out-freq').textContent = `${settings.freq} THz`;
-  $('frequency').value = settings.freq;
-  $('frequency').style.setProperty('--progress', `${(settings.freq - 400) / 350 * 100}%`);
-  const p = PARAM[settings.experiment];
-  $('param-group').hidden = !p;
-  if (p) {
-    const input = $('param');
-    Object.assign(input, {min: p.min, max: p.max, step: p.step});
-    input.value = settings[p.key];
-    input.style.setProperty('--progress', `${(settings[p.key] - p.min) / (p.max - p.min) * 100}%`);
-    $('param-name').textContent = p.name;
-    $('out-param').textContent = p.format(settings[p.key]);
-  }
-  $('out-rate').textContent = `${RATES[settings.rate]}×`;
-  $('rate').value = settings.rate;
-  $('rate').style.setProperty('--progress', `${settings.rate / 3 * 100}%`);
-}
-function chooseExperiment(name) {
-  settings.experiment = name;
-  setupExperiment(true);
-  ratioWindow.value = null;
-  if (!playing) setPlaying(true);
-}
-
-$('play').onclick = () => setPlaying(!playing);
-$('reset').onclick = () => chooseExperiment(settings.experiment);
-$('view-surface').onclick = () => setView(false, true);
-$('view-top').onclick = () => setView(true, true);
-$('reset-camera').onclick = () => setFraming(targetHeight > .5 ? 'surface' : 'top');
-for (const b of document.querySelectorAll('[data-experiment]')) b.onclick = () => chooseExperiment(b.dataset.experiment);
-for (const chip of document.querySelectorAll('.chip')) chip.onclick = () => { layers[chip.dataset.layer] = !layers[chip.dataset.layer]; applyLayers(); };
-// Frequency, slit gap and glass index change live, without clearing the waves already travelling.
-$('frequency').addEventListener('input', e => { setFrequency(+e.target.value); setSources(); ratioWindow.value = null; updateControls(); });
-$('param').addEventListener('input', e => {
-  const p = PARAM[settings.experiment];
-  settings[p.key] = +e.target.value;
-  setupExperiment(false);
-  ratioWindow.value = null;
-});
-$('rate').addEventListener('input', e => { settings.rate = +e.target.value; updateControls(); });
-function showPanel(open) {
-  $('panel').classList.toggle('sheet-closed', !open);
-  $('panel-toggle').setAttribute('aria-expanded', String(open));
-}
-$('panel-toggle').onclick = () => showPanel($('panel').classList.contains('sheet-closed'));
-bindDialog($('notes'), $('about'), () => setPlaying(false));
-stage.onContextLost = () => setPlaying(false);
-const toggleView = () => setView(targetHeight > .5, true);
-bindKeys({
-  ' ': () => setPlaying(!playing),
-  1: () => chooseExperiment('antenna'), 2: () => chooseExperiment('plane'),
-  3: () => chooseExperiment('slits'), 4: () => chooseExperiment('lens'),
-  t: toggleView, T: toggleView,
-  r: () => chooseExperiment(settings.experiment), R: () => chooseExperiment(settings.experiment),
-});
-
-const story = createStory({
-  steps,
-  onEnter(step, index) {
-    settings.experiment = step.experiment;
-    setupExperiment(true);
-    ratioWindow.value = null;
-    setView(step.view === 'top');
-    applyLayers(step.layers);
-    showPanel(index === steps.length - 1 && !narrow());
-    setFraming(step.view === 'top' ? 'top' : 'surface');
-    showTip(0, 0, null);
-    setPlaying(!reducedMotion);
-  },
-});
-
-offset.copy(fitted(new THREE.Vector3(...FRAMING.surface())));
-camera.position.copy(target).add(offset);
-controls.target.copy(target);
-controls.update();
-story.show(0);
-new ResizeObserver(() => stage.resize()).observe($('story'));
-new ResizeObserver(() => stage.resize()).observe($('readout'));
-new ResizeObserver(() => {
-  document.documentElement.style.setProperty('--dock-h', `${$('transport').offsetHeight}px`);
-  stage.resize();
-}).observe($('transport'));
-
-let lastFrame = performance.now();
-function frame(time) {
+  draw();
+  if (now - lastInsight > 400) { lastInsight = now; renderInsight(); }
   requestAnimationFrame(frame);
-  const dt = Math.max(0, Math.min((time - lastFrame) / 1000, .08));
-  lastFrame = time;
-  if (!document.hidden) simulate(dt);
-  heightOn += (targetHeight - heightOn) * Math.min(1, dt * 4);
-  intensityMix += ((layers.intensity ? 1 : 0) - intensityMix) * Math.min(1, dt * 4);
-  surfaceMaterial.uniforms.heightScale.value = 1.25 * heightOn * (1 - .75 * intensityMix);
-  surfaceMaterial.uniforms.mode.value = intensityMix;
-  group.props.scale.y = .25 + .75 * heightOn;
-  writeTexture();
-  if (layers.arrows) { updateArrows(); updateTravel(); }
-  updateRuler(dt);
-  updateSource();
-  updateScreen();
-
-  controls.update();
-  offset.copy(camera.position).sub(controls.target);
-  if (offsetTween) {
-    offsetTween.u = Math.min(1, offsetTween.u + dt / 1.2);
-    const k = offsetTween.u < .5 ? 2 * offsetTween.u ** 2 : 1 - (-2 * offsetTween.u + 2) ** 2 / 2;
-    offset.lerpVectors(offsetTween.from, offsetTween.to, k);
-    if (offsetTween.u === 1) offsetTween = null;
-  }
-  controls.target.copy(target);
-  camera.position.copy(target).add(offset);
-  stage.setFogFor(offset.length() * 1.4);
-
-  updateReadout();
-  updateLabels();
-  stage.render();
 }
-setPlaying(playing);
+setTool('move');
+setPlaying(true);
+load(experiments[0]);
 requestAnimationFrame(frame);
 
-// With ?debug in the URL, expose a hook for advancing the simulation quickly during checks.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__light = {field, settings, story, snap() { if (offsetTween) offsetTween.u = .999; heightOn = targetHeight; intensityMix = layers.intensity ? 1 : 0; rulerLen = settings.lambda; }, setFrequency(f) { setFrequency(f); setSources(); updateControls(); }, run(steps) { stepDebt += steps; const was = playing; playing = true; simulate(0); playing = was; }};
+  window.__light = {
+    lab, field, experiments,
+    load: id => load(experiments.find(x => x.id === id)),
+    run: steps => { for (let k = 0; k < steps; k++) step(); renderInsight(); draw(); return field.t; },
+    setFrequency,
+    snap: () => ({t: field.t, freq: lab.freq, lines: lab.lines, sources: lab.sources.length, screen: lab.screen, insight: $('insight')?.textContent}),
+  };
 }

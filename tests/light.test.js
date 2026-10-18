@@ -131,3 +131,15 @@ test('retuning a running source keeps the wave smooth (no grid-scale noise)', ()
   // A clean wave 20 to 30 cells long has roughness of order (2π/20)⁴ ≈ 0.01; grid noise pushes it far higher.
   assert.ok(smooth < .05, `retuned roughness ${smooth}`);
 });
+
+test('a point source can be moved while it runs, and 600 THz is 500 nm', () => {
+  const f = em.createField({nx: 80, ny: 80, border: 10});
+  const src = em.pointSource(30, 40, {omega: em.omegaFor(16), amp: 4});
+  f.sources.push(src);
+  for (let n = 0; n < 40; n++) f.step();
+  src.i = 50;
+  const before = Math.abs(f.ez[40 * 80 + 50]);
+  for (let n = 0; n < 6; n++) f.step();
+  assert.ok(Math.abs(f.ez[40 * 80 + 50]) > before + 1e-3, 'the field now grows at the new position');
+  assert.ok(Math.abs(em.nmForTHz(600) - 499.65) < .01);
+});

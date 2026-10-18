@@ -113,20 +113,25 @@ function oscillator(omega) {
 
 /** A point charge oscillating at angular frequency ω (an antenna seen end-on). */
 export function pointSource(i, j, {omega, amp = 1, phase = 0}) {
-  const osc = oscillator(omega);
-  return {kind: 'point', i, j, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
+  const osc = oscillator(omega), t0 = {value: null};
+  // Position can be changed while it runs (src.i, src.j); the ramp restarts from when it was created.
+  const src = {kind: 'point', i, j, on: true, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
+    t0.value ??= f.t;
     const v = phase ? Math.sin(osc.omega * f.t + phase) : osc.value(f.t);
-    f.ez[j * f.nx + i] += amp * f.dt * v * ramp(f.t, 2 * Math.PI / omega);
+    if (src.on) f.ez[Math.round(src.j) * f.nx + Math.round(src.i)] += amp * f.dt * v * ramp(f.t - t0.value, 2 * Math.PI / omega);
   }};
+  return src;
 }
 
 /** A line of sources at column i: launches a plane wave travelling along ±x. */
 export function lineSource(i, {omega, amp = 1, from, to}) {
-  const osc = oscillator(omega);
-  return {kind: 'line', i, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
-    const v = amp * f.dt * osc.value(f.t) * ramp(f.t, 2 * Math.PI / omega);
-    for (let j = from ?? 0; j < (to ?? f.ny); j++) f.ez[j * f.nx + i] += v;
+  const osc = oscillator(omega), t0 = {value: null};
+  const src = {kind: 'line', i, on: true, get omega() { return osc.omega; }, retune: osc.retune, apply(f) {
+    t0.value ??= f.t;
+    const v = amp * f.dt * osc.value(f.t) * ramp(f.t - t0.value, 2 * Math.PI / omega);
+    if (src.on) for (let j = from ?? 0; j < (to ?? f.ny); j++) f.ez[j * f.nx + Math.round(src.i)] += v;
   }};
+  return src;
 }
 
 /** A short Gaussian burst at one point or along a column: a single ripple or a single wavefront. */
@@ -141,3 +146,7 @@ export function pulse({i, j = null, t0, width, amp = 1, from, to}) {
 
 /** Angular frequency for a wavelength λ (in grid cells) in vacuum. */
 export const omegaFor = lambda => 2 * Math.PI / lambda;
+
+/** Wavelength in vacuum (nm) for a frequency in THz, and back. */
+export const C_NM_THZ = 299792.458;
+export const nmForTHz = f => C_NM_THZ / f;
