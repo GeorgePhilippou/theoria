@@ -170,7 +170,7 @@ function drawTitleBlock() {
   ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
   ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y + 17); ctx.lineTo(x + w, y + 17); ctx.moveTo(x, y + 34); ctx.lineTo(x + w, y + 34); ctx.stroke();
   const i = plates.indexOf(lab.plate) + 1;
-  letter('THEORIA · RAYS AND LENSES', x + 6, y + 13, {size: 9, bg: null});
+  letter('SCIENCE YOU CAN SEE · RAYS AND LENSES', x + 6, y + 13, {size: 9, bg: null});
   letter(`PLATE ${String(i).padStart(2, '0')} · ${lab.plate.label.toUpperCase()}`, x + 6, y + 30, {size: 9, bg: null, color: C.spot});
   letter('1 SQUARE = 1 cm', x + 6, y + 46, {size: 9, bg: null, color: C.ink3});
 }

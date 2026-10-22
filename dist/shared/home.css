@@ -1,4 +1,4 @@
-/* Theoria home page. Builds on the tokens and type in shell.css. */
+/* Science You Can See home page. Builds on the tokens and type in shell.css. */
 /* The window scrolls (not the body), so mobile browser bars collapse and anchors work. */
 html:has(body.home), body.home { height: auto; }
 body.home {

@@ -1,4 +1,4 @@
-// Interface pieces shared by every Theoria concept: transport, guided tour, notes dialog, labels.
+// Interface pieces shared by every Science You Can See concept: transport, guided tour, notes dialog, labels.
 
 export const $ = id => document.getElementById(id);
 export const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;

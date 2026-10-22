@@ -1,4 +1,4 @@
-// Rendering stage shared by Theoria concepts: renderer with bloom, lighting, fog,
+// Rendering stage shared by Science You Can See concepts: renderer with bloom, lighting, fog,
 // thick anti-aliased lines, glow sprites, sky and stars.
 import * as THREE from 'three';
 import {OrbitControls} from '../vendor/OrbitControls.js';

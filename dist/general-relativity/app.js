@@ -280,7 +280,7 @@ function drawTitleBlock() {
   ctx.fillStyle = C.paper2; ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
   ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y + 17); ctx.lineTo(x + w, y + 17); ctx.moveTo(x, y + 34); ctx.lineTo(x + w, y + 34); ctx.stroke();
-  letter('THEORIA · CURVED SPACETIME', x + 6, y + 13, {size: 9, bg: null});
+  letter('SCIENCE YOU CAN SEE · CURVED SPACETIME', x + 6, y + 13, {size: 9, bg: null});
   letter(`PLATE ${String(plates.indexOf(lab.plate) + 1).padStart(2, '0')} · ${lab.plate.label.toUpperCase()}`, x + 6, y + 30, {size: 9, bg: null, color: C.spot});
   letter(`1 RING = ${lab.scale === 'rs' ? '1 rₛ' : formatLength(1)} · t̃ ${formatTime(lab.now)}`, x + 6, y + 46, {size: 9, bg: null, color: C.ink3});
 }

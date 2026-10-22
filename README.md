@@ -1,6 +1,6 @@
-# Theoria — science you can see
+# Science You Can See
 
-Theoria (θεωρία, "looking at", the root of both *theory* and *theatre*) is a collection of interactive, scientifically accurate visual models. Each concept leads with a plain-language guided tour, with the exact physics one tap away.
+Science You Can See (formerly Theoria) is a collection of interactive, scientifically accurate visual models of physics. Each concept is a hands-on sandbox with plain-language notes, with the exact physics one tap away.
 
 Play: https://georgephilippou.github.io/theoria/
 
